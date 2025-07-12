@@ -1,0 +1,39 @@
+laker/
+│
+├── src/
+│   └── laker/
+│       ├── __init__.py
+│       ├── main.py
+│       ├── load_table_log.py
+│       ├── table_ddl_config.py
+│       ├── table_differences.py
+│       ├── table_differences_logger.py
+│       ├── table_introspector.py
+│       ├── table_loader.py
+│       ├── table_sanitizer.py
+│       ├── table_validator.py
+│       └── config/
+│           ├── __init__.py
+│           └── tables/
+│               ├── __init__.py
+│               └── load_table_log.yaml
+│
+├── config/
+│   └── example.yaml
+│
+├── tests/
+│   ├── test_main.py
+│   ├── test_table_loader.py
+│   ├── test_table_differences.py
+│   └── ...
+│
+├── .gitignore
+├── LICENSE
+├── README.md
+├── pyproject.toml
+├── setup.cfg
+├── setup.py
+├── requirements.txt
+├── .github/
+├── MANIFEST.in
+├── TREE.txt
