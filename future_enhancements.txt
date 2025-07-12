@@ -1,0 +1,24 @@
+Future Enhancements
+│
+├─ CLI Wrapper
+│   └─ Provide a simple `my-loader apply <yaml>` CLI entry-point
+│
+├─ Auto-Generated Docs (MkDocs)
+│   ├─ Script to convert each YAML → Markdown (columns, types, comments, tags)
+│   ├─ mkdocs.yml config with “tables/” nav
+│   └─ `mkdocs serve` / `mkdocs build` → static HTML site
+│
+├─ GitOps / CI Integration
+│   ├─ On each PR to `config/tables/`, run TableYamlValidator
+│   ├─ Dry-run loader to preview DDL diffs in CI logs
+│   └─ Fail fast if validation or diff preview errors
+│
+├─ Schema Registry (JSON Schema / OpenAPI)
+│   ├─ Publish a machine-readable spec for your YAML format
+│   ├─ Enable editor auto-completion & linting (VS Code, PyCharm)
+│   └─ Potential codegen or validation in external tools
+│
+└─ Interactive UI
+    ├─ Lightweight Streamlit or React app
+    ├─ Real-time YAML editing + validation + Mermaid visualization
+    └─ One-click PR generation back to your Git repo

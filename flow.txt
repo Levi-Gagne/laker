@@ -1,0 +1,110 @@
+┌───────────────────────────────────────────────────┐
+│ run_table_load(yaml_path, …)                     │
+│   (main.py)                                      │
+└───────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌───────────────────────────────────────────────────┐
+│ 1) LOAD & SANITIZE YAML                          │
+│   • YamlConfig.load_config()                     │
+│   • recursive_sanitize_comments()                │
+│   • sanitize_metadata()                          │
+│   (yamlConfig.py & table_sanitizer.py)           │
+└───────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌───────────────────────────────────────────────────┐
+│ 2) VALIDATE YAML                                 │
+│   • TableYamlValidator.validate_dict(cfg)        │
+│   (table_validator.py)                           │
+└───────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌───────────────────────────────────────────────────┐
+│ 3) BUILD FQ NAME & CHECK EXISTENCE               │
+│   • fq = catalog.schema.table                    │
+│   • introspector.table_exists(fq)                │
+│   (table_introspector.py)                        │
+└───────────────────────────────────────────────────┘
+                    │
+            ┌───────┴───────┐
+            │               │
+        NOT EXISTS       EXISTS
+            │               │
+            ▼               ▼
+
+    FULL-CREATE PATH      DIFF & UPDATE PATH
+┌───────────────────────┐ ┌───────────────────────────────────────────┐
+│ 4a) _create_table()   │ │ 4b) raw_snap = introspector.snapshot()   │
+│     (table_loader.py) │ │     (table_introspector.py)               │
+│   → emit CREATE DDL   │ └───────────────────────────────────────────┘
+└───────────────────────┘               │
+            │                           ▼
+            ▼                 ┌───────────────────────────────────────┐
+┌──────────────────────────────┤ 5a) Apply all metadata on fresh create:│
+│ 5a) APPLY METADATA          │     • table_properties                │
+│     • via ALTER TABLE       │     • table_tags                      │
+│     • (table_loader.py)     │     • column comments & tags          │
+└──────────────────────────────└───────────────────────────────────────┘
+            │
+            ▼
+┌───────────────────────────────────────────────────┐
+│ 6a) Print “[SUCCESS] full create of fq completed.” │
+└───────────────────────────────────────────────────┘
+            │
+            ▼
+          EXIT
+
+
+┌───────────────────────────────────────────────────┐
+│      (back in EXISTS branch…)                    │
+└───────────────────────────────────────────────────┘
+            │
+            ▼
+┌───────────────────────────────────────────────────┐
+│ 4b) raw_snap = introspector.snapshot(fq)         │
+└───────────────────────────────────────────────────┘
+            │
+            ▼
+┌───────────────────────────────────────────────────┐
+│ 5b) clean_snap = sanitize_snapshot(raw_snap)     │
+│     (table_sanitizer.py)                         │
+└───────────────────────────────────────────────────┘
+            │
+            ▼
+┌───────────────────────────────────────────────────┐
+│ 6b) diff = compute_diff(cfg, raw_snap)           │
+│     (table_differences.py)                       │
+└───────────────────────────────────────────────────┘
+            │
+      ┌─────┴─────┐
+      │           │
+    no diffs     yes diffs
+      │           │
+      ▼           ▼
+┌───────────────────────────┐     ┌───────────────────────────────────────────┐
+│ 7b.i) Print “No metadata │     │ 7b.ii) Schema-evolution?                  │
+│        changes; exiting.”│     │   • if only props/comments/tags → SKIP   │
+└───────────────────────────┘     │     pre-flight                             │
+      │                          │   • if structural (add/drop/rename) →    │
+      ▼                          │     run SchemaEvolutionValidator.validate │
+    EXIT                         │     (schema_evolution_validator.py)       │
+                                 └─────────────────────┬─────────────────────┘
+                                                       │
+                                              ┌────────┴────────┐
+                                              │                 │
+                                         FAIL pre-flight     PASS pre-flight
+                                              │                 │
+                                              ▼                 ▼
+                              ┌──────────────────────────────┐  ┌───────────────────────────────┐
+                              │ 8f) Print error & sys.exit() │  │ 8u) _update_table(fq, raw_snap) │
+                              │                              │  │     (table_loader.py)          │
+                              └──────────────────────────────┘  └───────────────────────────────┘
+                                                                         │
+                                                                         ▼
+                                                      ┌───────────────────────────────┐
+                                                      │ 9u) Print “[SUCCESS] fq in sync”│
+                                                      └───────────────────────────────┘
+                                                                         │
+                                                                         ▼
+                                                                        EXIT
