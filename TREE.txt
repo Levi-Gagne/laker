@@ -1,7 +1,7 @@
-laker/
+layker/
 │
 ├── src/
-│   └── laker/
+│   └── layker/
 │       ├── __init__.py
 │       ├── main.py
 │       ├── load_table_log.py
@@ -14,6 +14,7 @@ laker/
 │       └── table_validator.py
 │
 ├── config/
+│   ├── example.yaml
 │   └── load_table_log.yaml
 │
 ├── tests/
