@@ -18,19 +18,21 @@ layker/
 │   └── load_table_log.yaml
 │
 ├── tests/
+│   ├── __init__.py
 │   ├── test_main.py
 │   ├── test_table_loader.py
-│   └── ...
+│   └── ...              # Add more test files as needed
 │
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── pyproject.toml
-├── setup.cfg
+├── setup.cfg            # (optional, for black/isort/pytest config)
 ├── setup.py
-├── requirements.txt
-├── .github/
+├── requirements.txt     # (dev + runtime deps)
 ├── MANIFEST.in
 ├── TREE.txt
 ├── FLOW.txt
-└── ...
+└── .github/
+    └── workflows/
+        └── ci.yaml     # (optional, for GitHub Actions)
