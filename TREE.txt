@@ -11,20 +11,14 @@ laker/
 │       ├── table_introspector.py
 │       ├── table_loader.py
 │       ├── table_sanitizer.py
-│       ├── table_validator.py
-│       └── config/
-│           ├── __init__.py
-│           └── tables/
-│               ├── __init__.py
-│               └── load_table_log.yaml
+│       └── table_validator.py
 │
 ├── config/
-│   └── example.yaml
+│   └── load_table_log.yaml
 │
 ├── tests/
 │   ├── test_main.py
 │   ├── test_table_loader.py
-│   ├── test_table_differences.py
 │   └── ...
 │
 ├── .gitignore
@@ -37,3 +31,5 @@ laker/
 ├── .github/
 ├── MANIFEST.in
 ├── TREE.txt
+├── FLOW.txt
+└── ...
