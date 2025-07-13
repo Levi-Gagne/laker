@@ -1,4 +1,4 @@
-# src/utils/load_table/table_differences_logger.py
+# src/layker/differences_logger.py
 
 import yaml
 from pathlib import Path
