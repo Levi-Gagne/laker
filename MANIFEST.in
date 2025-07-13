@@ -1,0 +1,24 @@
+# Include essential docs
+include README.md
+include LICENSE
+include TREE.txt
+include FLOW.txt
+
+# Include YAML config and audit files
+recursive-include src/layker/config *.yaml
+recursive-include src/layker/changelog *.yaml
+
+# Include tests (if you want to distribute them)
+recursive-include tests *.py
+
+# Include any example scripts (if you add these)
+recursive-include examples *.py
+recursive-include examples *.yaml
+
+# Include package metadata (setup, pyproject)
+include pyproject.toml
+include setup.py
+include requirements.txt
+
+# Include any markdown documentation in source tree
+recursive-include src/layker *.md
