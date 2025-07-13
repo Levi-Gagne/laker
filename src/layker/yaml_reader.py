@@ -1,4 +1,4 @@
-# src/utils/load_table/table_ddl_config.py
+# src/layker/yaml_reader.py
 
 import yaml
 from typing import Any, Dict, List, Optional, Union
