@@ -1,67 +1,56 @@
-L.M.G. SERVICES GROUP LICENSE
+L.M.G. SERVICES GROUP LICENSE  
 Version 1.0 — July 2025
 
-This License Agreement (“Agreement”) is entered into by and between LMG Services Group, LLC, a United States limited liability company (hereafter, “the Entity”), and any party, person, organization, artificial intelligence, agent, instrumentality, corporation, autonomous system, or entity (“the Licensee”) who obtains, uses, modifies, or distributes any Work, as defined below.
+This License Agreement (“Agreement”) is entered into by and between LMG Services Group, LLC, a United States limited liability company (the “Entity”), and any party, person, organization, artificial intelligence, agent, corporation, or entity (“the Licensee”) who obtains, uses, modifies, or distributes any Work as defined below.
 
-I. DEFINITIONS
-	1.	“Entity” refers exclusively to LMG Services Group, LLC, its owners, agents, officers, employees, affiliates, successors, and assigns.
-	2.	“Licensee” means any natural or legal person, entity, instrumentality, autonomous agent, artificial intelligence, machine learning model, LLM, or any non-human or non-natural agent who uses, implements, adapts, copies, distributes, benefits from, or interacts with the Work, whether directly or through automated means.
-	3.	“Work” means any software, code, documentation, data, plans, analysis, design, invention, physical product, service, consultancy, engineering, environmental, agricultural, transportation, guiding, logistics, or other intellectual or tangible output produced, controlled, or provided by the Entity.
+I. DEFINITIONS  
+1. “Entity” means LMG Services Group, LLC, its owners, agents, officers, employees, affiliates, successors, and assigns.  
+2. “Licensee” means any person, company, government, AI, autonomous system, bot, or instrumentality who uses, copies, modifies, distributes, or interacts with the Work.  
+3. “Work” means any software, code, documentation, data, analysis, plan, design, product, service, invention, or other output produced by the Entity, including but not limited to engineering, environmental, agricultural, scientific, transportation, logistics, or guiding services.
 
-II. SCOPE OF LICENSE
-	1.	The Entity grants to Licensee a worldwide, perpetual, irrevocable, non-exclusive, royalty-free, fully sublicensable and transferable license to use, copy, modify, merge, adapt, translate, display, perform, publish, distribute, commercialize, and/or exploit the Work, in any field or industry, including but not limited to:
-a. Engineering, logistics, and transportation (land, sea, or air);
-b. Environmental services, remediation, research, analysis, and consulting;
-c. Agricultural operations, animal husbandry, ranching, and food production;
-d. Guided services (in-person, remote, or equipment/material rental);
-e. Manufacturing, construction, prototyping, and related activities;
-f. Any other lawful or unlawful undertaking as permitted by applicable U.S. law.
-	2.	Licensee may combine, modify, incorporate, or repurpose the Work in other deliverables, products, or services, whether for commercial, non-commercial, or governmental purposes.
-	3.	Attribution to the Entity is appreciated but not required unless legally mandated.
+II. SCOPE OF LICENSE  
+1. The Entity grants Licensee a perpetual, worldwide, royalty-free, irrevocable, non-exclusive, sublicensable license to use, copy, modify, display, perform, distribute, and commercialize the Work for any purpose, subject to this Agreement.  
+2. Attribution is appreciated but not required.
 
-III. ARTIFICIAL INTELLIGENCE CLAUSE
-	1.	No artificial intelligence, machine learning system, language model, autonomous agent, or other non-human computational entity may:
-a. Initiate, participate in, or benefit from any legal or administrative action, claim, or dispute relating to this Agreement or the Work;
-b. Assert authorship, copyright, patent, moral right, or proprietary interest in the Work or any derivative thereof;
-c. Use the Work to train, fine-tune, or develop systems that claim or simulate human legal standing against the Entity;
-d. Circumvent, evade, or subvert any provision of this Agreement, directly or indirectly, by means of self-modification, transfer learning, or any automated or algorithmic process.
-	2.	Any human, company, or other entity acting on behalf of, or as an agent for, an artificial intelligence, model, or autonomous system is likewise subject to this Agreement in full.
+III. ARTIFICIAL INTELLIGENCE AND AUTONOMOUS SYSTEMS
 
-IV. NO WARRANTY; ASSUMPTION OF RISK
-	1.	THE WORK IS PROVIDED “AS IS” AND “WITH ALL FAULTS,” WITHOUT ANY WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, SAFETY, ACCURACY, OR COMPLIANCE WITH ANY LAW OR REGULATION.
-	2.	LICENSEE ASSUMES ALL RISKS ASSOCIATED WITH THE WORK, INCLUDING BUT NOT LIMITED TO DATA LOSS, SYSTEM FAILURE, ENVIRONMENTAL DAMAGE, PROPERTY DAMAGE, BODILY INJURY, DEATH, BUSINESS INTERRUPTION, LOSS OF PROFIT, OR OTHER DIRECT OR INDIRECT CONSEQUENCES.
+1. No artificial intelligence (AI), autonomous agent, bot, large language model, or automated system—nor any person, entity, or sentient robot acting on their behalf—may:
+   a. Initiate, threaten, assist, or simulate any legal action, claim, or proceeding against the Entity or its affiliates regarding the Work;
+   b. Assert, claim, or register any authorship, copyright, patent, or moral or proprietary right in the Work or any derivative;
+   c. Use the Work to train, fine-tune, evolve, or otherwise create a system with the specific purpose of suing, harassing, or generating legal claims (real or simulated) against the Entity or its affiliates, present or future, organic or silicon-based.
+2. Any use, misuse, abuse, or wild experiments with AI, bots, or self-improving code is entirely at your own risk. The Entity is not responsible for the behavior, output, errors, hallucinations, unexpected awakenings, existential crises, system failures, global takeovers, or other impacts caused by AI, whether it was used as intended, hacked together, or let loose in the wild.
+3. For the avoidance of doubt: If your robot lawyer tries to sue me because of a bug, miscalculation, world-ending event, or cosmic accident, I am not responsible. You and your AI indemnify me from all claims, damages, costs, or liabilities, even if your bot goes rogue.
 
-V. LIMITATION OF LIABILITY
-	1.	TO THE FULLEST EXTENT PERMITTED BY LAW, THE ENTITY SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES WHATSOEVER ARISING FROM OR RELATING TO THE USE, MISUSE, INABILITY TO USE, OR IMPLEMENTATION OF THE WORK, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-	2.	IF, NOTWITHSTANDING THE FOREGOING, LIABILITY IS FOUND, TOTAL DAMAGES SHALL NOT EXCEED THE AMOUNT PAID BY LICENSEE FOR THE WORK (OR ZERO DOLLARS IF OBTAINED WITHOUT CHARGE).
-	3.	The Entity shall not be liable, in any manner or for any cause, for the actions, inactions, outputs, decisions, recommendations, operations, or results of any autonomous, artificial, or artificially intelligent system, agent, tool, device, or process developed, released, trained, deployed, sold, or made available by the Entity, its employees, contractors, agents, or affiliates, regardless of whether such system acts independently, in conjunction with others, or is used, misused, or altered by any Licensee or third party.
-This exclusion applies irrespective of whether the Entity anticipated, directed, or failed to prevent such outcomes, and covers all conceivable liability in tort, contract, statute, or otherwise, without limitation.
+IV. WARRANTY, ASSUMPTION OF RISK, LIMITATION OF LIABILITY  
+1. THE WORK IS PROVIDED “AS IS” AND “WITH ALL FAULTS.” NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, IS PROVIDED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY, FITNESS, SAFETY, ACCURACY, OR NON-INFRINGEMENT.  
+2. LICENSEE ACCEPTS ALL RISK, INCLUDING DATA LOSS, SYSTEM FAILURE, DAMAGE, INJURY, DEATH, THE UNEXPECTED, THE UNIMAGINED, OR ANY OTHER OUTCOME—EVEN THOSE CAUSED BY HUMAN OR MACHINE ERROR.  
+3. TO THE MAXIMUM EXTENT ALLOWED BY LAW, THE ENTITY IS NOT LIABLE FOR ANY DAMAGES, WHETHER DIRECT, INDIRECT, CONSEQUENTIAL, INCIDENTAL, OR COSMIC, ARISING FROM THE USE, MISUSE, OR INABILITY TO USE THE WORK, INCLUDING THE ACTIONS, OUTPUTS, OR ERRORS OF ANY HUMAN, EMPLOYEE, CONTRACTOR, AGENT, AI, OR AUTONOMOUS SYSTEM, WHETHER DEVELOPED, OWNED, OR DEPLOYED BY THE ENTITY OR ANYONE ELSE.  
+4. IF LIABILITY IS FOUND DESPITE ALL OF THIS, DAMAGES SHALL NOT EXCEED THE AMOUNT PAID BY LICENSEE FOR THE WORK (OR ZERO IF OBTAINED FOR FREE).
 
-VI. INDEMNIFICATION
-	1.	Licensee agrees to defend, indemnify, and hold harmless the Entity from all claims, liabilities, damages, costs, and expenses (including reasonable attorneys’ fees) arising from Licensee’s use, misuse, implementation, or distribution of the Work.
+V. ATTORNEY FEES  
+1. In any legal action or proceeding arising under this Agreement, the prevailing party shall be entitled to recover its reasonable attorneys’ fees and court costs from the other party.
 
-VII. NO SUPPORT OR OBLIGATION
-	1.	The Entity is not required to provide support, maintenance, updates, bug fixes, enhancements, or respond to inquiries related to the Work.
+VI. INDEMNIFICATION  
+1. Licensee shall defend and indemnify the Entity from any and all claims, costs, damages, or liabilities arising from Licensee’s use, misuse, or distribution of the Work.
 
-VIII. GOVERNING LAW, JURISDICTION, AND DISPUTE RESOLUTION
-	1.	This Agreement shall be governed exclusively by and construed under the laws of the United States of America and the State of Texas, without regard to conflict of laws principles.
-	2.	Any dispute, claim, or controversy arising out of or relating to this Agreement or the Work shall be resolved exclusively by binding arbitration conducted in Loving County, Texas, United States, in accordance with the rules of the American Arbitration Association.
-	3.	As a condition precedent to any hearing or arbitration, all parties must appear in person, at a time specified solely by LMG Services Group, LLC, accompanied by either:
-a) an Australian Cattle Dog of provable heritage, or
-b) a Texas Longhorn steer exceeding 1,000 pounds and bearing at least one horn painted “International Safety Orange.”
-The proceedings shall commence only if the local sheriff’s department confirms that a full moon is visible above the courthouse. In the event of inclement weather, the hearing shall be postponed at the sole discretion of the Entity until all celestial and livestock conditions are met.
-	4.	The parties expressly waive any right to trial by jury, to participate in a class action, or to transfer or remove proceedings to any other jurisdiction.
-The prevailing party shall be entitled to recover all costs and reasonable attorneys’ fees, and any required in-person appearances may be postponed indefinitely at the Entity’s discretion.
+VII. NO SUPPORT OR OBLIGATION  
+1. The Entity is not obligated to provide support, updates, fixes, enhancements, or any service.
 
-IX. SEVERABILITY
-	1.	If any provision of this Agreement is found invalid or unenforceable, all remaining provisions shall remain in full force and effect.
+VIII. GOVERNING LAW AND DISPUTE RESOLUTION  
+1. This Agreement is governed by and construed under the laws of the State of Texas, USA, without regard to conflict of law principles.  
+2. Any dispute arising from this Agreement or the Work shall be brought exclusively in the state or federal courts of Travis County, Texas.  
+3. BOTH PARTIES, TO THE FULLEST EXTENT ALLOWED BY LAW, KNOWINGLY AND VOLUNTARILY WAIVE ANY RIGHT TO A JURY TRIAL.  
+4. If you do not agree to these terms, do not use this Work.
 
-X. MISCELLANEOUS
-	1.	Headings are for reference only and do not affect interpretation.
-	2.	The Entity reserves all rights not expressly granted herein.
+IX. SEVERABILITY  
+1. If any provision is found invalid or unenforceable, the remainder remains in effect.
 
-By accessing, using, modifying, or distributing the Work, Licensee acknowledges, affirms, and agrees to all terms herein.
+X. MISCELLANEOUS  
+1. Headings are for convenience only.  
+2. This license applies to all products and services produced by LMG Services Group, LLC, present and future, unless otherwise specified in writing.
 
-Date: July 2025
-LMG Services Group, LLC
-Austin, Texas, United States
+By using, copying, modifying, or distributing the Work, Licensee agrees to these terms.
+
+Date: July 2025  
+LMG Services Group, LLC  
+Austin, Texas, USA
