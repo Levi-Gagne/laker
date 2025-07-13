@@ -1,1 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
+[project]
+name = "layker"
+version = "0.1.0"
+description = "Lakehouse-Aligned YAML Kit for Engineering Rules"
+authors = [
+  { name="Levi Gagne", email="levigagne0@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "pyspark>=3.3.0",
+  "pyyaml>=5.4",
+  "typing-extensions>=4.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/Levi-Gagne/layker"
+Issues = "https://github.com/Levi-Gagne/layker/issues"
