@@ -5,17 +5,17 @@ from pyspark.sql import SparkSession
 import sys
 
 from layker import color
-from layker.table_sanitizer import (
+from layker.sanitizer import (
     recursive_sanitize_comments,
     sanitize_metadata,
     sanitize_snapshot,
 )
-from layker.table_validator import TableYamlValidator
-from layker.table_introspector import TableIntrospector
-from layker.table_differences import compute_diff
-from layker.table_loader import DatabricksTableLoader
-from layker.table_differences_logger import log_comparison
-from layker.table_ddl_config import TableSchemaConfig
+from layker.validator import TableYamlValidator
+from layker.introspector import TableIntrospector
+from layker.differences import compute_diff
+from layker.loader import DatabricksTableLoader
+from layker.differences_logger import log_comparison
+from layker.yaml_readee import TableSchemaConfig
 
 def run_table_load(
     yaml_path: str,
