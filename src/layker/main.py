@@ -15,7 +15,7 @@ from layker.introspector import TableIntrospector
 from layker.differences import compute_diff
 from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
-from layker.yaml_readee import TableSchemaConfig
+from layker.yaml_reader import TableSchemaConfig
 
 def run_table_load(
     yaml_path: str,
