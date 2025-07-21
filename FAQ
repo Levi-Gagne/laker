@@ -1,0 +1,159 @@
+==========================
+FREQUENTLY ASKED QUESTIONS
+==========================
+
+Table of Contents
+-----------------
+0. VERSION, COMPATIBILITY, AND ENVIRONMENT
+   0.1 What Python and Spark versions does this support?
+   0.2 Can I run this outside Databricks?
+1. USAGE & ORCHESTRATION
+   1.1 How do I use this code?
+   1.2 Can I use this with multiple tables or YAMLs?
+   1.3 Where should this tool be used—ETL, ad hoc, or other?
+   1.4 How does environment/config passing work?
+   1.5 Does this tool ever touch actual table data?
+   1.6 Can I preview changes before applying?
+   1.7 What if I stop using the tool?
+2. YAML STORAGE & MANAGEMENT
+   2.1 Where should I store my YAML files?
+   2.2 Can I put YAML in a notebook cell?
+   2.3 How should I organize YAML for different environments?
+3. YAML FORMATTING & REFERENCE
+   3.1 What are the minimum YAML requirements?
+   3.2 What are the formatting/naming rules for constraints, tags, keys?
+   3.3 Is there a YAML example for all options?
+   3.4 How do foreign keys work in this YAML?
+4. SUPPORTED & UNSUPPORTED CHANGES
+   4.1 What changes are supported in schema evolution?
+   4.2 What’s NOT supported? (type changes, reordering, etc.)
+   4.3 What actually happens with remove/re-add columns in Delta?
+   4.4 What about changes to constraints, tags, properties?
+   4.5 What happens if I try to change a column type?
+5. METADATA USE CASES & ADVANCED REFERENCE
+   5.1 Can I use this YAML as a config/reference file?
+   5.2 How can I reference YAML-defined keys, tags, or FKs in other code?
+   5.3 Can this tool help other ETL jobs manage dependencies?
+
+--------------------------------------------------------------------------------
+
+0. VERSION, COMPATIBILITY, AND ENVIRONMENT
+------------------------------------------
+
+0.1 WHAT PYTHON AND SPARK VERSIONS DOES THIS SUPPORT?
+- Python 3.9+  
+- Tested on Databricks Runtime 12.x and above (or equivalent Spark 3.3+)
+- Requires `pyspark` and `pyyaml`
+
+0.2 CAN I RUN THIS OUTSIDE DATABRICKS?
+- No. This tool is designed for Databricks Lakehouse.  
+- It relies on a live SparkSession and Unity Catalog/Delta features.  
+- The codebase is generic enough to be portable, but no support is provided for running outside Databricks at this time.
+
+--------------------------------------------------------------------------------
+
+1. USAGE & ORCHESTRATION
+------------------------
+
+1.1 HOW DO I USE THIS CODE?
+Run:
+    python -m layker path/to/your_config.yaml
+This calls the main function, loading YAML and applying schema/metadata changes.
+
+1.2 CAN I USE THIS WITH MULTIPLE TABLES OR YAMLS?
+Yes—loop over YAML files in Python or as job steps. Each YAML handles one table; orchestrate as needed.
+
+1.3 WHERE SHOULD THIS TOOL BE USED—ETL, AD HOC, OR OTHER?
+Run as part of your ETL job (after writing), as an ad hoc notebook/job, or as a metadata enforcement step.
+
+1.4 HOW DOES ENVIRONMENT/CONFIG PASSING WORK?
+YAML supports variable substitution (e.g., dq_dev_{env}). Pass parameters from job context, environment variables, or script arguments.
+
+1.5 DOES THIS TOOL EVER TOUCH ACTUAL TABLE DATA?
+No—it only manages schema and metadata (columns, tags, comments, constraints). Data is untouched except when a column is removed: it becomes invisible, but data remains until VACUUM.
+
+1.6 CAN I PREVIEW CHANGES BEFORE APPLYING?
+Yes, enable the `dry_run` option to see a full list of proposed DDL/metadata changes.
+
+1.7 WHAT IF I STOP USING THE TOOL?
+Your tables remain as-is, with no dependency or lock-in.
+
+--------------------------------------------------------------------------------
+
+2. YAML STORAGE & MANAGEMENT
+----------------------------
+
+2.1 WHERE SHOULD I STORE MY YAML FILES?
+- **Recommended:** Store YAML in your code repository (git) for auditability, change tracking, and pull request review.
+    - *Advantages*: History, collaboration, approvals.
+    - *Disadvantages*: Changes require a PR, which can slow down rapid metadata edits.
+- **Alternative:** Store YAML in a Databricks volume if available.  
+    - *Advantages*: Immediate updates, no PR needed. Good for operational agility.
+    - *Disadvantages*: No git/version history; changes are not automatically reviewed.
+- Both are valid; pick based on your workflow. Always keep YAML as a **separate file** (not in notebook cells).
+
+2.2 CAN I PUT YAML IN A NOTEBOOK CELL?
+- Strongly discouraged. While technically possible with small changes, storing YAML in a cell makes code harder to maintain, version, and audit. Use files.
+
+2.3 HOW SHOULD I ORGANIZE YAML FOR DIFFERENT ENVIRONMENTS?
+- Use per-environment YAML files, or parametrize the `catalog`/`schema` fields (e.g., `dq_dev_{env}`).
+- Organize files by environment, table, or project as needed.
+
+--------------------------------------------------------------------------------
+
+3. YAML FORMATTING & REFERENCE
+------------------------------
+
+3.1 WHAT ARE THE MINIMUM YAML REQUIREMENTS?
+You must specify `catalog`, `schema`, and `table`. All columns are listed under numerically indexed keys (`1:`, `2:`, ...). Each column must define `name` and `datatype`.
+
+3.2 WHAT ARE THE FORMATTING/NAMING RULES FOR CONSTRAINTS, TAGS, KEYS?
+- **Constraints:** Keys like `constraint_1`, `constraint_2`—each must have unique `name` and `expression`.
+- **Tags:** Tags are dictionaries (`tags: { key: value }`); keys must be unique.
+- **Foreign/unique/primary keys:** Must use required keys; foreign keys are informational only.
+
+3.3 IS THERE A YAML EXAMPLE FOR ALL OPTIONS?
+Yes—see `example.yaml` in the repo for every supported field and annotation.
+
+3.4 HOW DO FOREIGN KEYS WORK IN THIS YAML?
+Foreign keys are captured for reference only; Databricks does not enforce them. They provide metadata value for data modeling or for extracting config information programmatically.
+
+--------------------------------------------------------------------------------
+
+4. SUPPORTED & UNSUPPORTED CHANGES
+----------------------------------
+
+4.1 WHAT CHANGES ARE SUPPORTED IN SCHEMA EVOLUTION?
+- **Add column:** Supported (appended at end).
+- **Remove column:** Supported (column becomes invisible; data stays in Delta files).
+- **Rename column:** Supported (by position and type only; not by label alone).
+
+4.2 WHAT’S NOT SUPPORTED?
+- **Change column type:** Not supported by Delta/Databricks schema evolution. To change type, create a new table or reload the data.
+- **Reorder columns:** Not supported. Columns are compared by position; reordering is not possible.
+- **Composite operations:** (e.g., both rename and type change at once) are not supported.
+
+4.3 WHAT HAPPENS IF I REMOVE AND THEN RE-ADD A COLUMN?
+If you remove a column, it becomes invisible. If you re-add the column with the same name and type, and VACUUM hasn’t run, old data is visible again for old records; new records written without the column will show null for that field.
+
+4.4 WHAT ABOUT CHANGES TO CONSTRAINTS, TAGS, PROPERTIES?
+Any constraint, tag, or property present in YAML but not on the table will be added. Any present on the table but not in YAML will be dropped on sync.
+
+4.5 WHAT HAPPENS IF I TRY TO CHANGE A COLUMN TYPE?
+This will fail validation—schema evolution does not support type changes. You must create a new table or reload data with the new schema.
+
+--------------------------------------------------------------------------------
+
+5. METADATA USE CASES & ADVANCED REFERENCE
+------------------------------------------
+
+5.1 CAN I USE THIS YAML AS A CONFIG/REFERENCE FILE?
+Yes. The YAML is a single source of truth for table structure, keys, tags, constraints, etc.—you can use it for documentation, reference, or as config input for other jobs.
+
+5.2 HOW CAN I REFERENCE YAML-DEFINED KEYS, TAGS, OR FKs IN OTHER CODE?
+Parse the YAML directly with PyYAML or similar. Any field in the YAML (primary keys, tags, foreign keys) can be accessed programmatically by any Python/ETL code—not just the loader.
+
+5.3 CAN THIS TOOL HELP OTHER ETL JOBS MANAGE DEPENDENCIES?
+Yes. You can reference YAML for table structure, constraints, owner, or custom properties as part of dependency management, ETL job configuration, or pipeline automation.
+
+--------------------------------------------------------------------------------
