@@ -1,7 +1,7 @@
 # src/utils/load_table/table_differences.py
 
 from typing import Any, Dict, List, Tuple
-from utils.load_table.table_sanitizer import sanitize_snapshot, normalize_dict
+from layker.sanitizer import sanitize_snapshot
 
 def compute_diff(
     cfg: Dict[str, Any],
