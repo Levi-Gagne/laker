@@ -24,6 +24,9 @@ layker/
 │   ├── __init__.py
 │   ├── test_main.py
 │   └── test_loader.py
+├── logs/
+│   ├── ...
+│   └── ...
 ├── README.md
 ├── LICENSE
 ├── pyproject.toml

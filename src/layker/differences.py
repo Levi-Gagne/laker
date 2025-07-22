@@ -1,18 +1,17 @@
-# src/utils/load_table/table_differences.py
+# src/layker/differences.py
 
 from typing import Any, Dict, List, Tuple
-from layker.sanitizer import sanitize_snapshot
+
+def normalize_dict(d: Dict[Any, Any]) -> Dict[str, str]:
+    return {str(k).lower(): str(v) for k, v in d.items()}
 
 def compute_diff(
     cfg: Dict[str, Any],
-    raw_snap: Dict[str, Any]
+    snap: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Compute metadata diffs between sanitized YAML cfg and a raw table snapshot.
-    Now includes unique keys, FKs, check constraints, row filters, col checks.
+    Compute metadata diffs between sanitized YAML cfg and a sanitized table snapshot.
     """
-    snap = sanitize_snapshot(raw_snap)
-
     # YAML side
     cols = [c for c in cfg["columns"].values() if c.get("active", True)]
     yaml_cols     = [(c["name"], c["datatype"].lower()) for c in cols]
@@ -20,13 +19,7 @@ def compute_diff(
     yaml_ctags    = {c["name"]: c.get("tags", {})    for c in cols}
     yaml_col_checks = {c["name"]: c.get("column_check_constraints", {}) for c in cols}
 
-    norm_yaml_props = normalize_dict(
-        cfg.get("properties", {}).get("table_properties", {})
-    )
-    norm_yaml_tags  = normalize_dict(cfg.get("tags", {}))
-    yaml_tcomm      = cfg.get("properties", {}).get("comment", "")
-
-    # Table side (all as produced by sanitize_snapshot)
+    # Table side (already sanitized)
     snap_cols     = snap["columns"]
     snap_comments = snap["comments"]
     snap_ctags    = snap["col_tags"]
@@ -67,14 +60,14 @@ def compute_diff(
 
     # 3) Table-property diffs (only YAML keys)
     property_changes: List[Tuple[str, Any, Any]] = []
-    for k, yv in norm_yaml_props.items():
+    for k, yv in cfg.get("properties", {}).get("table_properties", {}).items():
         sv = snap_props.get(k)
         if yv != sv:
             property_changes.append((k, sv, yv))
 
     # 4) Table-tag diffs (only YAML keys)
     table_tag_changes: List[Tuple[str, Any, Any]] = []
-    for k, yv in norm_yaml_tags.items():
+    for k, yv in cfg.get("tags", {}).items():
         sv = snap_tags.get(k)
         if yv != sv:
             table_tag_changes.append((k, sv, yv))
@@ -98,6 +91,7 @@ def compute_diff(
 
     # 7) Table-comment diffs
     table_comment_change = None
+    yaml_tcomm = cfg.get("properties", {}).get("comment", "")
     if yaml_tcomm != snap_tcomm:
         table_comment_change = (snap_tcomm, yaml_tcomm)
 
@@ -108,7 +102,6 @@ def compute_diff(
 
     # --- NEW: Foreign Key diffs ---
     foreign_key_changes = []
-    # Only compare keys that exist in YAML; don't compare system FKs not tracked by YAML
     for fk, yv in yaml_foreign_keys.items():
         sv = snap_foreign_keys.get(fk)
         if yv != sv:
@@ -132,7 +125,6 @@ def compute_diff(
     column_check_constraint_changes = []
     for col, y_checks in yaml_col_checks.items():
         s_checks = snap_col_checks.get(col, {}) if snap_col_checks else {}
-        # Only compare by constraint name
         for ck, yv in y_checks.items():
             sv = s_checks.get(ck)
             if yv != sv:

@@ -1,0 +1,356 @@
+# YAML from layker/schema/example.yaml
+
+catalog: dq_dev
+schema: lmg_sandbox
+table: config_driven_table_example
+primary_key:
+- example_id
+partitioned_by:
+- event_date
+unique_keys: []
+table_check_constraints:
+  constraint_1:
+    name: check_event_date_past
+    expression: event_date <= current_date()
+row_filters:
+  row_filter_1:
+    name: rls_internal_only
+    expression: classification = `internal`
+tags:
+  team: dq
+  project: poc
+  data_owner: levi.gagne@claconnect.com
+  classification: internal
+owner: levi.gagne@claconnect.com
+properties:
+  comment: "**Table:** dq_dev.lmg_sandbox.config_driven_table_example\n\n**Governance**\n\
+    - YAML is the source of truth; changes in UI are not tracked.\n- Required: catalog,\
+    \ schema, table, at least one column with name/datatype.\n- Use partitioned_by\
+    \ for scalability if needed.\n\n**Evolution**\n- Adding columns to the end is\
+    \ supported.\n- Renaming columns (by position/type) is supported.\n- Data type\
+    \ changes or column drops require matching positions.\n- Foreign keys here are\
+    \ not enforced\u2014reference only."
+  table_properties:
+    delta.columnMapping.mode: name
+    delta.minReaderVersion: '2'
+    delta.minWriterVersion: '5'
+columns:
+  1:
+    name: example_id
+    datatype: string
+    nullable: false
+    comment: 'Primary key: unique row id for this table.'
+    tags:
+      pii: false
+      business_key: true
+      sensitive: true
+    column_masking_rule: MASKED WITH SHA256
+    default_value: null
+    variable_value: special_code_string
+    allowed_values:
+    - A
+    - B
+    - C
+    column_check_constraints:
+      constraint_1:
+        name: check_example_id_nonempty
+        expression: length(example_id) > 0
+      constraint_2:
+        name: check_example_id_not_test
+        expression: example_id != 'TEST'
+    active: true
+  2:
+    name: minimal_col
+    datatype: string
+    nullable: true
+    active: true
+  3:
+    name: column_1
+    datatype: string
+    nullable: true
+    comment: ''
+    tags: {}
+    column_masking_rule: ''
+    default_value: default
+    variable_value: 42
+    allowed_values: []
+    column_check_constraints:
+      constraint_1:
+        name: check_column_1_not_null_when_active
+        expression: active = true OR column_1 IS NOT NULL
+      constraint_2:
+        name: check_column_1_length_limit
+        expression: length(column_1) <= 100
+    active: true
+  4:
+    name: column_2
+    datatype: int
+    nullable: false
+    comment: Integer value for sample calculations.
+    tags:
+      business_key: false
+    column_masking_rule: ''
+    default_value: 0
+    variable_value: null
+    allowed_values: []
+    column_check_constraints:
+      positive:
+        name: check_column_2_positive
+        expression: column_2 >= 0
+      even:
+        name: check_column_2_even
+        expression: column_2 % 2 = 0
+    active: true
+  5:
+    name: column_3
+    datatype: double
+    nullable: true
+    comment: Numeric column for analytic tests.
+    tags: {}
+    column_masking_rule: ''
+    default_value: null
+    variable_value: 3.14159
+    allowed_values: []
+    active: true
+  6:
+    name: event_date
+    datatype: date
+    nullable: false
+    comment: Event date for partitioning.
+    tags:
+      partition_key: true
+    column_masking_rule: ''
+    default_value: null
+    variable_value: date_api_code
+    allowed_values: []
+    active: true
+  7:
+    name: email
+    datatype: string
+    nullable: false
+    comment: User email address. Unique constraint applied.
+    tags:
+      pii: true
+    column_masking_rule: ''
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+  8:
+    name: user_id
+    datatype: string
+    nullable: false
+    comment: Alternate user id for composite unique constraint.
+    tags: {}
+    column_masking_rule: ''
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+  9:
+    name: group_id
+    datatype: string
+    nullable: false
+    comment: Group id for composite unique constraint.
+    tags: {}
+    column_masking_rule: ''
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+  10:
+    name: created_at
+    datatype: timestamp
+    nullable: false
+    comment: Timestamp when row was created.
+    tags: {}
+    column_masking_rule: ''
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+  11:
+    name: created_by
+    datatype: string
+    nullable: false
+    comment: System or user that created this row.
+    tags:
+      audit: true
+    column_masking_rule: ''
+    default_value: admin_user
+    variable_value: null
+    allowed_values: []
+    active: true
+  12:
+    name: updated_at
+    datatype: timestamp
+    nullable: true
+    comment: Timestamp for the most recent update to this row.
+    tags: {}
+    column_masking_rule: ''
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+  13:
+    name: updated_by
+    datatype: string
+    nullable: true
+    comment: System or user that last updated this row.
+    tags: {}
+    column_masking_rule: ''
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+
+
+# --------- Table snapshot: dq_dev.lmg_sandbox.config_driven_table_example ---------
+
+columns:
+- - example_id
+  - string
+- - minimal_col
+  - string
+- - column_1
+  - string
+- - column_2
+  - int
+- - column_3
+  - double
+- - event_date
+  - date
+- - email
+  - string
+- - user_id
+  - string
+- - group_id
+  - string
+- - created_at
+  - timestamp
+- - created_by
+  - string
+- - updated_at
+  - timestamp
+- - updated_by
+  - string
+- - event_date
+  - date
+comments:
+  example_id: 'Primary key: unique row id for this table.'
+  minimal_col: ''
+  column_1: ''
+  column_2: Integer value for sample calculations.
+  column_3: Numeric column for analytic tests.
+  event_date: Event date for partitioning.
+  email: User email address. Unique constraint applied.
+  user_id: Alternate user id for composite unique constraint.
+  group_id: Group id for composite unique constraint.
+  created_at: Timestamp when row was created.
+  created_by: System or user that created this row.
+  updated_at: Timestamp for the most recent update to this row.
+  updated_by: System or user that last updated this row.
+  Catalog: ''
+  Database: ''
+  Table: ''
+  Created Time: ''
+  Last Access: ''
+  Created By: ''
+  Type: ''
+  Comment: ''
+  Location: ''
+  Provider: ''
+  Owner: ''
+  Is_managed_location: ''
+  Predictive Optimization: ''
+  Table Properties: ''
+  config_driven_table_example_pk: ''
+col_tags: {}
+tbl_tags: {}
+tbl_props:
+  deletedfileretentionduration: 720h
+  delta.columnmapping.maxcolumnid: '13'
+  delta.columnmapping.mode: name
+  delta.constraints.constraint_1: event_date <= current_date ( )
+  delta.enabledeletionvectors: 'true'
+  delta.feature.appendonly: supported
+  delta.feature.changedatafeed: supported
+  delta.feature.checkconstraints: supported
+  delta.feature.columnmapping: supported
+  delta.feature.deletionvectors: supported
+  delta.feature.generatedcolumns: supported
+  delta.feature.invariants: supported
+  delta.minreaderversion: '3'
+  delta.minwriterversion: '7'
+tbl_comment: ''
+tbl_constraints: {}
+col_masking_rules:
+  example_id: ''
+  minimal_col: ''
+  column_1: ''
+  column_2: ''
+  column_3: ''
+  event_date: ''
+  email: ''
+  user_id: ''
+  group_id: ''
+  created_at: ''
+  created_by: ''
+  updated_at: ''
+  updated_by: ''
+col_default_values:
+  example_id: ''
+  minimal_col: ''
+  column_1: ''
+  column_2: ''
+  column_3: ''
+  event_date: ''
+  email: ''
+  user_id: ''
+  group_id: ''
+  created_at: ''
+  created_by: ''
+  updated_at: ''
+  updated_by: ''
+col_variable_values:
+  example_id: ''
+  minimal_col: ''
+  column_1: ''
+  column_2: ''
+  column_3: ''
+  event_date: ''
+  email: ''
+  user_id: ''
+  group_id: ''
+  created_at: ''
+  created_by: ''
+  updated_at: ''
+  updated_by: ''
+col_col_constraints:
+  example_id: {}
+  minimal_col: {}
+  column_1: {}
+  column_2: {}
+  column_3: {}
+  event_date: {}
+  email: {}
+  user_id: {}
+  group_id: {}
+  created_at: {}
+  created_by: {}
+  updated_at: {}
+  updated_by: {}
+
+# YAML Row Filters:
+
+# Column-level CHECK constraints:
+
+# Column Masking Rules:
+
+# Column Default Values:
+
+# Column Variable Values:
+
+# Primary Key:
+
+# Partitioned By:
