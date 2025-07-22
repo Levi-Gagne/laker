@@ -20,11 +20,12 @@ from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
 from layker.audit.logger import TableAuditLogger
 
+import yaml
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "LakerAuditLog.yaml")
 ACTOR = os.environ.get("USER") or getpass.getuser() or "unknown_actor"
 
-# --- Optional: Preformatted section headers for extra clarity (reuse freely) ---
 def section_header(title, color=C.aqua_blue):
     bar = f"{color}{C.b}" + "═" * 62 + C.r
     title_line = f"{color}{C.b}║ {title.center(58)} ║{C.r}"
@@ -56,15 +57,39 @@ def run_table_load(
         # STEP 1: VALIDATE & SANITIZE YAML
         if spark is None:
             print_warning("No SparkSession passed; starting a new one.")
-            spark = SparkSession.builder.getOrCreate()
+            try:
+                spark = SparkSession.builder.getOrCreate()
+            except Exception as e:
+                print_error(f"Could not start SparkSession: {e}")
+                sys.exit(2)
 
         print(section_header("STEP 1/4: VALIDATING YAML"))
-        ddl_cfg = TableSchemaConfig(yaml_path, env=env)
-        raw_cfg = ddl_cfg._config
-        cfg     = recursive_sanitize_comments(raw_cfg)
-        cfg     = sanitize_metadata(cfg)
+        try:
+            ddl_cfg = TableSchemaConfig(yaml_path, env=env)
+            raw_cfg = ddl_cfg._config
+        except FileNotFoundError as e:
+            print_error(f"YAML file not found: {e}")
+            sys.exit(2)
+        except yaml.YAMLError as e:
+            print_error(f"YAML syntax error in {yaml_path}: {e}")
+            sys.exit(2)
+        except Exception as e:
+            print_error(f"Error loading or parsing YAML: {e}")
+            sys.exit(2)
 
-        valid, errors = TableYamlValidator.validate_dict(cfg)
+        try:
+            cfg = recursive_sanitize_comments(raw_cfg)
+            cfg = sanitize_metadata(cfg)
+        except Exception as e:
+            print_error(f"Error sanitizing YAML: {e}")
+            sys.exit(2)
+
+        try:
+            valid, errors = TableYamlValidator.validate_dict(cfg)
+        except Exception as e:
+            print_error(f"Validation crashed: {e}")
+            sys.exit(2)
+
         if not valid:
             print_error("Validation failed:")
             for err in errors:
@@ -77,19 +102,33 @@ def run_table_load(
             return
 
         fq = ddl_cfg.full_table_name
-        introspector = TableIntrospector(spark)
-        loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
+        try:
+            introspector = TableIntrospector(spark)
+            loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
+        except Exception as e:
+            print_error(f"Could not initialize introspector or loader: {e}")
+            sys.exit(2)
 
         # STEP 2: AUDIT LOGGER INIT
         print(section_header("STEP 2/4: AUDIT LOGGING CONFIGURATION", color=C.sky_blue))
         if audit_log_table:
             print(f"{C.b}{C.ivory}Audit logging is {C.green}ENABLED{C.ivory}; using table: {C.aqua_blue}{audit_log_table}{C.r}")
-            audit_logger = TableAuditLogger(
-                spark,
-                ddl_yaml_path=AUDIT_TABLE_YAML_PATH,
-                log_table=audit_log_table,
-                actor=ACTOR,
-            )
+            try:
+                audit_logger = TableAuditLogger(
+                    spark,
+                    ddl_yaml_path=AUDIT_TABLE_YAML_PATH,
+                    log_table=audit_log_table,
+                    actor=ACTOR,
+                )
+            except FileNotFoundError as e:
+                print_error(f"Audit log YAML missing: {e}")
+                sys.exit(2)
+            except yaml.YAMLError as e:
+                print_error(f"Audit log YAML is malformed: {e}")
+                sys.exit(2)
+            except Exception as e:
+                print_error(f"Could not initialize TableAuditLogger: {e}")
+                sys.exit(2)
             run_id = get_run_id()
         else:
             print(f"{C.b}{C.yellow}Audit logging is DISABLED for this run.{C.r}")
@@ -98,7 +137,12 @@ def run_table_load(
 
         # STEP 3: TABLE EXISTENCE
         print(section_header("STEP 3/4: TABLE EXISTENCE & DIFF"))
-        table_exists = introspector.table_exists(fq)
+        try:
+            table_exists = introspector.table_exists(fq)
+        except Exception as e:
+            print_error(f"Could not check table existence: {e}")
+            sys.exit(2)
+
         if not table_exists:
             print(f"{C.b}{C.ivory}Table {C.aqua_blue}{fq}{C.ivory} not found.{C.r}")
             if mode == "diff":
@@ -106,29 +150,43 @@ def run_table_load(
                 return
             elif mode in ("apply", "all"):
                 print(f"{C.b}{C.ivory}Performing full create of {C.aqua_blue}{fq}{C.ivory}.{C.r}")
-                loader.create_or_update_table()
-                print_success(f"[SUCCESS] Full create of {fq} completed.")
+                try:
+                    loader.create_or_update_table()
+                    print_success(f"[SUCCESS] Full create of {fq} completed.")
+                except Exception as e:
+                    print_error(f"Could not create table: {e}")
+                    sys.exit(2)
                 # --- AUDIT: Log CREATE ---
                 if audit_logger:
-                    audit_logger.log_changes(
-                        diff={"table_created": True},
-                        cfg=cfg,
-                        fqn=fq,
-                        env=env,
-                        run_id=run_id,
-                    )
+                    try:
+                        audit_logger.log_changes(
+                            diff={"table_created": True},
+                            cfg=cfg,
+                            fqn=fq,
+                            env=env,
+                            run_id=run_id,
+                        )
+                    except Exception as e:
+                        print_error(f"Audit log failed after table create: {e}")
                 print_success("Workflow complete. Table created and audit logged.")
                 return
 
         # STEP 4: COMPARE & DIFF
         print(section_header("STEP 4/4: METADATA DIFF"))
-        raw_snap   = introspector.snapshot(fq)
-        clean_snap = sanitize_snapshot(raw_snap)
-        diff       = compute_diff(cfg, clean_snap)
+        try:
+            raw_snap   = introspector.snapshot(fq)
+            clean_snap = sanitize_snapshot(raw_snap)
+            diff       = compute_diff(cfg, clean_snap)
+        except Exception as e:
+            print_error(f"Error during introspection or diff: {e}")
+            sys.exit(2)
 
         if log_ddl:
-            log_comparison(yaml_path, cfg, fq, clean_snap, log_ddl)
-            print(f"{C.b}{C.ivory}Wrote comparison log to {C.aqua_blue}{log_ddl}{C.r}")
+            try:
+                log_comparison(yaml_path, cfg, fq, clean_snap, log_ddl)
+                print(f"{C.b}{C.ivory}Wrote comparison log to {C.aqua_blue}{log_ddl}{C.r}")
+            except Exception as e:
+                print_error(f"Could not write diff log: {e}")
 
         if not any(diff.values()):
             print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
@@ -141,7 +199,6 @@ def run_table_load(
                     print(f"{C.b}{C.aqua_blue}{k}:{C.ivory} {v}{C.r}")
             return
 
-        # TYPE CHANGE CHECK & SCHEMA EVOLUTION
         if diff["type_changes"]:
             print_error("Type changes detected; in-place type change is not supported. Exiting.")
             sys.exit(1)
@@ -158,30 +215,43 @@ def run_table_load(
                 TableYamlValidator.check_delta_properties(clean_snap["tbl_props"])
             except Exception as e:
                 print_error(f"Pre-flight failed: {e}")
-                sys.exit(1)
+                sys.exit(2)
             print_success("Pre-flight checks passed.")
         else:
             print_warning("No schema-evolution needed; skipping pre-flight.")
 
         if mode in ("apply", "all"):
             print(section_header("APPLYING METADATA CHANGES", color=C.green))
-            loader.create_or_update_table()
-            print_success(f"Updates for {fq} applied.")
+            try:
+                loader.create_or_update_table()
+                print_success(f"Updates for {fq} applied.")
+            except Exception as e:
+                print_error(f"Failed to apply updates: {e}")
+                sys.exit(2)
             # --- AUDIT: Log UPDATE ---
             if audit_logger:
-                audit_logger.log_changes(
-                    diff=diff,
-                    cfg=cfg,
-                    fqn=fq,
-                    env=env,
-                    run_id=run_id,
-                )
-            print_success("Workflow complete. Updates applied and audit logged.")
+                try:
+                    audit_logger.log_changes(
+                        diff=diff,
+                        cfg=cfg,
+                        fqn=fq,
+                        env=env,
+                        run_id=run_id,
+                    )
+                    print_success("Workflow complete. Updates applied and audit logged.")
+                except Exception as e:
+                    print_error(f"Audit log failed after update: {e}")
+                    print_warning("Workflow completed but audit logging failed.")
 
     except SystemExit:
         raise
+    except KeyboardInterrupt:
+        print_error("Interrupted by user. Exiting...")
+        sys.exit(130)
     except Exception as e:
         print_error(f"Fatal error during run_table_load:\n{e}")
+        import traceback
+        print(f"{C.red}{traceback.format_exc()}{C.r}")
         sys.exit(1)
 
 def cli_entry():
