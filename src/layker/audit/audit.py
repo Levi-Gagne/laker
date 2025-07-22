@@ -1,27 +1,10 @@
-# src/layker/audit/logger.py
-
 import uuid, json, yaml, hashlib
 from datetime import datetime
 from pyspark.sql import Row
 
 class TableAuditLogger:
     """
-    
     Databricks/Spark audit logger for schema/table/column changes.
-
-    BUSINESS RULES:
-      - Only YAML-defined columns are written.
-      - Handles create/update/remove with versioned batch IDs:
-        * create-N_{fqn}: N = current create count + 1
-        * {max-create}_update-M_{fqn}: max-create = latest create, M = update count since that create
-      - before_value/after_value always JSON-stringified.
-      - For create:
-          * before_value is [ {fqn: config} ]
-          * after_value is the config as JSON
-      - For update/remove:
-          * batch_id includes max-create and update count
-      - change_hash is SHA256 of row content (for uniqueness/audit)
-      - Auto-creates table from YAML if not present.
     """
 
     ALLOWED_ENVS = {'prd', 'dev', 'test', 'qa'}
@@ -34,15 +17,133 @@ class TableAuditLogger:
         'column_masking_rule', 'column_default_value', 'column_variable_value'
     }
 
-    def __init__(self, spark, ddl_yaml_path, log_table, actor):
+    # ---- EVENT MAPPING ----
+    EVENT_MAP = {
+        "added_columns": dict(
+            change_type="add_column",
+            subject_type="column_name",
+            subject_name=lambda item, cfg: str(next((k for k, v in cfg["columns"].items() if v["name"] == item[0]), item[0])),
+            before_value=lambda item: None,
+            after_value=lambda item: item[1],
+            extra_fields={}
+        ),
+        "dropped_columns": dict(
+            change_type="drop_column",
+            subject_type="column_name",
+            subject_name=lambda item, cfg: item,
+            before_value=lambda item: item,
+            after_value=lambda item: None,
+            extra_fields={}
+        ),
+        "renamed_columns": dict(
+            change_type="rename_column",
+            subject_type="column_name",
+            subject_name=lambda item, cfg: item[1],
+            before_value=lambda item: item[0],
+            after_value=lambda item: item[1],
+            extra_fields={}
+        ),
+        "type_changes": dict(
+            change_type="type_change",
+            subject_type="column_datatype",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields={}
+        ),
+        "property_changes": dict(
+            change_type="update_property",
+            subject_type="table_property",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields=lambda item: {"property_key": item[0], "property_value": item[2]}
+        ),
+        "table_tag_changes": dict(
+            change_type="update_tag",
+            subject_type="table_tag",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields=lambda item: {"tag_key": item[0], "tag_value": item[2]}
+        ),
+        "column_tag_changes": dict(
+            change_type="update_column_tag",
+            subject_type="column_tag",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[2],
+            after_value=lambda item: item[3],
+            extra_fields=lambda item: {"tag_key": item[1], "tag_value": item[3]}
+        ),
+        "column_comment_changes": dict(
+            change_type="update_column_comment",
+            subject_type="column_comment",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields={}
+        ),
+        "unique_key_changes": dict(
+            change_type="update_unique_key",
+            subject_type="unique_key",
+            subject_name=lambda item, cfg: "unique_keys",
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields={}
+        ),
+        "foreign_key_changes": dict(
+            change_type="update_foreign_key",
+            subject_type="foreign_key",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields={}
+        ),
+        "table_check_constraint_changes": dict(
+            change_type="update_table_check_constraint",
+            subject_type="table_check_constraint",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields={}
+        ),
+        "row_filter_changes": dict(
+            change_type="update_row_filter",
+            subject_type="row_filter",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[1],
+            after_value=lambda item: item[2],
+            extra_fields={}
+        ),
+        "column_check_constraint_changes": dict(
+            change_type="update_column_check_constraint",
+            subject_type="column_check_constraint",
+            subject_name=lambda item, cfg: item[0],
+            before_value=lambda item: item[2],
+            after_value=lambda item: item[3],
+            extra_fields=lambda item: {"notes": f"constraint: {item[1]}"}
+        ),
+    }
+
+    def __init__(self, spark, ddl_yaml_path, log_table=None, actor=None):
         self.spark = spark
         self.ddl_yaml_path = ddl_yaml_path
-        self.log_table = log_table
-        self.actor = actor
         self.ddl = self._load_ddl_yaml()
+
+        if log_table:
+            self.log_table = log_table
+        else:
+            catalog = self.ddl.get("catalog", "")
+            schema = self.ddl.get("schema", "")
+            table = self.ddl.get("table", "")
+            if not all([catalog, schema, table]):
+                raise ValueError("Audit DDL YAML must specify catalog, schema, and table, or log_table must be passed explicitly.")
+            self.log_table = f"{catalog}.{schema}.{table}"
+
+        self.actor = actor
         self.columns = self._get_columns()
         if "change_hash" not in self.columns:
-            self.columns.append("change_hash")  # Optional: add if you want to store it in the table
+            self.columns.append("change_hash")
 
     def _load_ddl_yaml(self):
         with open(self.ddl_yaml_path) as f:
@@ -89,7 +190,6 @@ class TableAuditLogger:
         return value
 
     def _make_change_hash(self, row_dict):
-        # Use a stable set of fields for the hash
         relevant = {k: row_dict.get(k) for k in self.columns if k not in {"change_id", "created_at", "change_hash"}}
         encoded = json.dumps(relevant, sort_keys=True, default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
@@ -164,81 +264,37 @@ class TableAuditLogger:
                 before_value=before_array,
                 after_value=cfg
             ))
-
-        # UPDATE/REMOVE EVENTS (handles all diff types)
         else:
             create_num = self._get_max_create_num(fqn)
             update_num = self._get_next_update_num(fqn, create_num)
             batch_id = f"{create_num}_update-{update_num}_{fqn}"
-            # Add columns
-            for name, dtype in diff.get("added_columns", []):
-                idx = next((k for k, v in cfg["columns"].items() if v["name"] == name), name)
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="add_column",
-                    subject_type="column_name", subject_name=str(idx),
-                    before_value=None, after_value=dtype
-                ))
-            # Drop columns
-            for name in diff.get("dropped_columns", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="drop_column",
-                    subject_type="column_name", subject_name=name,
-                    before_value=name, after_value=None
-                ))
-            # Rename columns
-            for old, new in diff.get("renamed_columns", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="rename_column",
-                    subject_type="column_name", subject_name=new,
-                    before_value=old, after_value=new
-                ))
-            # Type changes
-            for col, from_type, to_type in diff.get("type_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="type_change",
-                    subject_type="column_datatype", subject_name=col,
-                    before_value=from_type, after_value=to_type
-                ))
-            # Property changes
-            for k, old, new in diff.get("property_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_property",
-                    subject_type="table_property", subject_name=k,
-                    property_key=k, property_value=new,
-                    before_value=old, after_value=new
-                ))
-            # Table tag changes
-            for k, old, new in diff.get("table_tag_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_tag",
-                    subject_type="table_tag", subject_name=k,
-                    tag_key=k, tag_value=new,
-                    before_value=old, after_value=new
-                ))
-            # Column tag changes
-            for col, k, old, new in diff.get("column_tag_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_column_tag",
-                    subject_type="column_tag", subject_name=col,
-                    tag_key=k, tag_value=new,
-                    before_value=old, after_value=new
-                ))
-            # Column comment changes
-            for col, old, new in diff.get("column_comment_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_column_comment",
-                    subject_type="column_comment", subject_name=col,
-                    before_value=old, after_value=new
-                ))
-            # Table comment change
+
+            # Super-DRY unified loop
+            for diff_key, event in self.EVENT_MAP.items():
+                items = diff.get(diff_key, [])
+                for item in items:
+                    base = dict(
+                        batch_id=batch_id,
+                        run_id=run_id,
+                        env=env,
+                        yaml_path=self.ddl_yaml_path,
+                        fqn=fqn,
+                        change_category="update",
+                        change_type=event["change_type"],
+                        subject_type=event["subject_type"],
+                        subject_name=event["subject_name"](item, cfg),
+                        before_value=event["before_value"](item),
+                        after_value=event["after_value"](item),
+                    )
+                    # Extra fields can be static dict or lambda
+                    extra = event.get("extra_fields", {})
+                    if callable(extra):
+                        base.update(extra(item))
+                    elif isinstance(extra, dict):
+                        base.update(extra)
+                    log_rows.append(self._row(**base))
+
+            # Table comment change (special, single tuple)
             if diff.get("table_comment_change"):
                 old, new = diff["table_comment_change"]
                 log_rows.append(self._row(
@@ -246,46 +302,6 @@ class TableAuditLogger:
                     change_category="update", change_type="update_comment",
                     subject_type="table_description", subject_name=cfg["table"],
                     before_value=old, after_value=new
-                ))
-            # Unique key changes
-            for _, old, new in diff.get("unique_key_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_unique_key",
-                    subject_type="unique_key", subject_name="unique_keys",
-                    before_value=old, after_value=new
-                ))
-            # Foreign key changes
-            for fk, old, new in diff.get("foreign_key_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_foreign_key",
-                    subject_type="foreign_key", subject_name=fk,
-                    before_value=old, after_value=new
-                ))
-            # Table check constraint changes
-            for cname, old, new in diff.get("table_check_constraint_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_table_check_constraint",
-                    subject_type="table_check_constraint", subject_name=cname,
-                    before_value=old, after_value=new
-                ))
-            # Row filter changes
-            for fname, old, new in diff.get("row_filter_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_row_filter",
-                    subject_type="row_filter", subject_name=fname,
-                    before_value=old, after_value=new
-                ))
-            # Column check constraint changes
-            for col, ck, old, new in diff.get("column_check_constraint_changes", []):
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_column_check_constraint",
-                    subject_type="column_check_constraint", subject_name=col,
-                    before_value=old, after_value=new, notes=f"constraint: {ck}"
                 ))
 
         if log_rows:
