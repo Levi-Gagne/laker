@@ -1,8 +1,8 @@
-# src/layker/main.py
-
 from typing import Dict, Any, Optional
 from pyspark.sql import SparkSession
 import sys
+import getpass
+import os
 
 from layker import color
 from layker.sanitizer import (
@@ -16,6 +16,16 @@ from layker.differences import compute_diff
 from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
+from layker.audit import TableAuditLogger
+
+# ---- AUDIT CONFIG ----
+AUDIT_TABLE_YAML_PATH = "/Workspace/Users/levi.gagne@claconnect.com/ddl/load_table_log.yaml"
+AUDIT_TABLE_FQN = "dq_dev.monitoring.load_table_log"   # Should match your audit log table
+ACTOR = os.environ.get("USER") or getpass.getuser() or "unknown_actor"
+
+def get_run_id():
+    # Optionally implement Databricks context detection here
+    return None  # Placeholder (set to None if not available)
 
 def run_table_load(
     yaml_path: str,
@@ -24,6 +34,7 @@ def run_table_load(
     spark: Optional[SparkSession] = None,
     env: Optional[str] = None,
     mode: str = "apply",
+    audit: bool = True,  # <---- New parameter
 ) -> None:
     try:
         # --- Step 1: VALIDATE & SANITIZE YAML ---
@@ -53,6 +64,19 @@ def run_table_load(
         introspector = TableIntrospector(spark)
         loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
 
+        # ---- Init Audit Logger (once per run, only if audit enabled) ----
+        if audit:
+            audit_logger = TableAuditLogger(
+                spark,
+                ddl_yaml_path=AUDIT_TABLE_YAML_PATH,
+                log_table=AUDIT_TABLE_FQN,
+                actor=ACTOR,
+            )
+            run_id = get_run_id()
+        else:
+            audit_logger = None
+            run_id = None
+
         print(f"{color.b}{color.aqua_blue}=== [Step 2/4] CHECKING TABLE EXISTENCE ==={color.b}")
         table_exists = introspector.table_exists(fq)
         if not table_exists:
@@ -64,6 +88,15 @@ def run_table_load(
                 print(f"{color.b}{color.ivory}Performing full create of {fq}.{color.b}")
                 loader.create_or_update_table()
                 print(f"{color.b}{color.green}[SUCCESS] Full create of {fq} completed.{color.b}")
+                # --- AUDIT: Log CREATE ---
+                if audit_logger:
+                    audit_logger.log_changes(
+                        diff={"table_created": True},
+                        cfg=cfg,
+                        fqn=fq,
+                        env=env,
+                        run_id=run_id,
+                    )
                 return
 
         # --- Step 3: COMPARE & DIFF ---
@@ -113,6 +146,15 @@ def run_table_load(
             print(f"{color.b}{color.aqua_blue}=== [Step 5/5] APPLYING METADATA CHANGES ==={color.b}")
             loader.create_or_update_table()
             print(f"{color.b}{color.green}[SUCCESS] Updates for {fq} applied.{color.b}")
+            # --- AUDIT: Log UPDATE ---
+            if audit_logger:
+                audit_logger.log_changes(
+                    diff=diff,
+                    cfg=cfg,
+                    fqn=fq,
+                    env=env,
+                    run_id=run_id,
+                )
 
     except SystemExit:
         raise
@@ -122,13 +164,15 @@ def run_table_load(
 
 def cli_entry():
     if len(sys.argv) < 2:
-        print(f"{color.b}{color.red}Usage: python -m layker <yaml_path> [env] [dry_run] [mode]{color.b}")
+        print(f"{color.b}{color.red}Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit]{color.b}")
         sys.exit(1)
     yaml_path = sys.argv[1]
     env      = sys.argv[2] if len(sys.argv) > 2 else None
     dry_run  = (len(sys.argv) > 3 and sys.argv[3].lower() == "true")
     mode     = sys.argv[4] if len(sys.argv) > 4 else "apply"
-    run_table_load(yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode)
+    # Enable/disable audit via CLI (default True)
+    audit    = True if len(sys.argv) < 6 else (sys.argv[5].lower() != "false")
+    run_table_load(yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit=audit)
 
 if __name__ == "__main__":
     cli_entry()
