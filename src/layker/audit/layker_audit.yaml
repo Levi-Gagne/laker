@@ -1,6 +1,6 @@
 catalog: dq_dev
 schema: monitoring
-table: layker_audit_log
+table: layker_audit
 
 primary_key: [change_id]          # UUID for each change event
 partitioned_by: []                # Not partitioned
