@@ -6,7 +6,7 @@ import sys
 import getpass
 import os
 
-from layker.color import Color
+from layker.color import Color as C
 from layker.sanitizer import (
     recursive_sanitize_comments,
     sanitize_metadata,
@@ -18,18 +18,30 @@ from layker.differences import compute_diff
 from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
-from layker.audit import TableAuditLogger
+from layker.audit.logger import TableAuditLogger
 
-# ---- AUDIT CONFIG ----
-# Use relative path based on the main.py file location
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "schema", "load_table_log.yaml")
-AUDIT_TABLE_FQN = "dq_dev.monitoring.load_table_log"   # Should match your audit log table
+AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "LakerAuditLog.yaml")
 ACTOR = os.environ.get("USER") or getpass.getuser() or "unknown_actor"
 
+# --- Optional: Preformatted section headers for extra clarity (reuse freely) ---
+def section_header(title, color=C.aqua_blue):
+    bar = f"{color}{C.b}" + "═" * 62 + C.r
+    title_line = f"{color}{C.b}║ {title.center(58)} ║{C.r}"
+    return f"\n{bar}\n{title_line}\n{bar}"
+
+def print_success(msg):
+    print(f"{C.b}{C.green}✔ {msg}{C.r}")
+
+def print_warning(msg):
+    print(f"{C.b}{C.yellow}! {msg}{C.r}")
+
+def print_error(msg):
+    print(f"{C.b}{C.candy_red}✘ {msg}{C.r}")
+
 def get_run_id():
-    # Optionally implement Databricks context detection here
-    return None  # Placeholder (set to None if not available)
+    # Placeholder for run id logic; update to fetch Databricks job run id if needed
+    return None
 
 def run_table_load(
     yaml_path: str,
@@ -38,15 +50,15 @@ def run_table_load(
     spark: Optional[SparkSession] = None,
     env: Optional[str] = None,
     mode: str = "apply",
-    audit: bool = True,  # <---- New parameter
+    audit_log_table: Optional[str] = None,
 ) -> None:
     try:
-        # --- Step 1: VALIDATE & SANITIZE YAML ---
+        # STEP 1: VALIDATE & SANITIZE YAML
         if spark is None:
-            print(f"{Color.b}{Color.ivory}No SparkSession passed; starting one...{Color.b}")
+            print_warning("No SparkSession passed; starting a new one.")
             spark = SparkSession.builder.getOrCreate()
 
-        print(f"{Color.b}{Color.aqua_blue}=== [Step 1/4] VALIDATING YAML ==={Color.b}")
+        print(section_header("STEP 1/4: VALIDATING YAML"))
         ddl_cfg = TableSchemaConfig(yaml_path, env=env)
         raw_cfg = ddl_cfg._config
         cfg     = recursive_sanitize_comments(raw_cfg)
@@ -54,44 +66,48 @@ def run_table_load(
 
         valid, errors = TableYamlValidator.validate_dict(cfg)
         if not valid:
-            print(f"{Color.b}{Color.candy_red}Validation failed:{Color.b}")
+            print_error("Validation failed:")
             for err in errors:
-                print(f"{Color.red}- {err}{Color.b}")
+                print(f"    {C.candy_red}- {err}{C.r}")
             sys.exit(1)
-        print(f"{Color.b}{Color.green}YAML validation passed.{Color.b}")
+        print_success("YAML validation passed.")
 
         if mode == "validate":
-            print(f"{Color.b}{Color.ivory}Mode 'validate': validation complete. No further action taken.{Color.b}")
+            print(f"{C.b}{C.ivory}Mode 'validate': validation complete. No further action taken.{C.r}")
             return
 
         fq = ddl_cfg.full_table_name
         introspector = TableIntrospector(spark)
         loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
 
-        # ---- Init Audit Logger (once per run, only if audit enabled) ----
-        if audit:
+        # STEP 2: AUDIT LOGGER INIT
+        print(section_header("STEP 2/4: AUDIT LOGGING CONFIGURATION", color=C.sky_blue))
+        if audit_log_table:
+            print(f"{C.b}{C.ivory}Audit logging is {C.green}ENABLED{C.ivory}; using table: {C.aqua_blue}{audit_log_table}{C.r}")
             audit_logger = TableAuditLogger(
                 spark,
                 ddl_yaml_path=AUDIT_TABLE_YAML_PATH,
-                log_table=AUDIT_TABLE_FQN,
+                log_table=audit_log_table,
                 actor=ACTOR,
             )
             run_id = get_run_id()
         else:
+            print(f"{C.b}{C.yellow}Audit logging is DISABLED for this run.{C.r}")
             audit_logger = None
             run_id = None
 
-        print(f"{Color.b}{Color.aqua_blue}=== [Step 2/4] CHECKING TABLE EXISTENCE ==={Color.b}")
+        # STEP 3: TABLE EXISTENCE
+        print(section_header("STEP 3/4: TABLE EXISTENCE & DIFF"))
         table_exists = introspector.table_exists(fq)
         if not table_exists:
-            print(f"{Color.b}{Color.ivory}Table {fq} not found.")
+            print(f"{C.b}{C.ivory}Table {C.aqua_blue}{fq}{C.ivory} not found.{C.r}")
             if mode == "diff":
-                print(f"{Color.b}{Color.ivory}[DIFF] Would create table {fq}.{Color.b}")
+                print_warning(f"[DIFF] Would create table {fq}.")
                 return
             elif mode in ("apply", "all"):
-                print(f"{Color.b}{Color.ivory}Performing full create of {fq}.{Color.b}")
+                print(f"{C.b}{C.ivory}Performing full create of {C.aqua_blue}{fq}{C.ivory}.{C.r}")
                 loader.create_or_update_table()
-                print(f"{Color.b}{Color.green}[SUCCESS] Full create of {fq} completed.{Color.b}")
+                print_success(f"[SUCCESS] Full create of {fq} completed.")
                 # --- AUDIT: Log CREATE ---
                 if audit_logger:
                     audit_logger.log_changes(
@@ -101,32 +117,33 @@ def run_table_load(
                         env=env,
                         run_id=run_id,
                     )
+                print_success("Workflow complete. Table created and audit logged.")
                 return
 
-        # --- Step 3: COMPARE & DIFF ---
-        print(f"{Color.b}{Color.aqua_blue}=== [Step 3/4] COMPARE & DIFF ==={Color.b}")
+        # STEP 4: COMPARE & DIFF
+        print(section_header("STEP 4/4: METADATA DIFF"))
         raw_snap   = introspector.snapshot(fq)
-        clean_snap = sanitize_snapshot(raw_snap)      # <--- SANITIZE snapshot here
-        diff       = compute_diff(cfg, clean_snap)    # <--- Pass sanitized
+        clean_snap = sanitize_snapshot(raw_snap)
+        diff       = compute_diff(cfg, clean_snap)
 
         if log_ddl:
             log_comparison(yaml_path, cfg, fq, clean_snap, log_ddl)
-            print(f"{Color.b}{Color.ivory}Wrote comparison log to {log_ddl}{Color.b}")
+            print(f"{C.b}{C.ivory}Wrote comparison log to {C.aqua_blue}{log_ddl}{C.r}")
 
         if not any(diff.values()):
-            print(f"{Color.b}{Color.ivory}No metadata changes detected; exiting.{Color.b}")
+            print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
             return
 
         if mode == "diff":
-            print(f"{Color.b}{Color.ivory}[DIFF] Proposed changes for {fq}:{Color.b}")
+            print_warning(f"[DIFF] Proposed changes for {fq}:")
             for k, v in diff.items():
                 if v:
-                    print(f"{Color.b}{Color.aqua_blue}{k}:{Color.b} {v}")
+                    print(f"{C.b}{C.aqua_blue}{k}:{C.ivory} {v}{C.r}")
             return
 
-        # --- Step 4: TYPE CHANGE CHECK & SCHEMA EVOLUTION ---
+        # TYPE CHANGE CHECK & SCHEMA EVOLUTION
         if diff["type_changes"]:
-            print(f"{Color.b}{Color.candy_red}Type changes detected; in-place type change is not supported. Exiting.{Color.b}")
+            print_error("Type changes detected; in-place type change is not supported. Exiting.")
             sys.exit(1)
 
         schema_changes = (
@@ -135,21 +152,21 @@ def run_table_load(
             diff["renamed_columns"]
         )
         if schema_changes:
-            print(f"{Color.b}{Color.aqua_blue}=== [Step 4/4] SCHEMA EVOLUTION PRE-FLIGHT ==={Color.b}")
+            print(section_header("SCHEMA EVOLUTION PRE-FLIGHT", color=C.neon_green))
             try:
                 TableYamlValidator.check_type_changes(cfg, raw_snap)
                 TableYamlValidator.check_delta_properties(clean_snap["tbl_props"])
             except Exception as e:
-                print(f"{Color.b}{Color.candy_red}Pre-flight failed:{Color.b}\n{Color.red}{e}{Color.b}")
+                print_error(f"Pre-flight failed: {e}")
                 sys.exit(1)
-            print(f"{Color.b}{Color.green}Pre-flight checks passed.{Color.b}")
+            print_success("Pre-flight checks passed.")
         else:
-            print(f"{Color.b}{Color.ivory}No schema-evolution needed; skipping pre-flight.{Color.b}")
+            print_warning("No schema-evolution needed; skipping pre-flight.")
 
         if mode in ("apply", "all"):
-            print(f"{Color.b}{Color.aqua_blue}=== [Step 5/5] APPLYING METADATA CHANGES ==={Color.b}")
+            print(section_header("APPLYING METADATA CHANGES", color=C.green))
             loader.create_or_update_table()
-            print(f"{Color.b}{Color.green}[SUCCESS] Updates for {fq} applied.{Color.b}")
+            print_success(f"Updates for {fq} applied.")
             # --- AUDIT: Log UPDATE ---
             if audit_logger:
                 audit_logger.log_changes(
@@ -159,23 +176,26 @@ def run_table_load(
                     env=env,
                     run_id=run_id,
                 )
+            print_success("Workflow complete. Updates applied and audit logged.")
 
     except SystemExit:
         raise
     except Exception as e:
-        print(f"{Color.b}{Color.candy_red}Fatal error during run_table_load:{Color.b}\n{Color.red}{e}{Color.b}")
+        print_error(f"Fatal error during run_table_load:\n{e}")
         sys.exit(1)
 
 def cli_entry():
     if len(sys.argv) < 2:
-        print(f"{Color.b}{Color.red}Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit]{Color.b}")
+        print_error("Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit_log_table]")
         sys.exit(1)
     yaml_path = sys.argv[1]
     env      = sys.argv[2] if len(sys.argv) > 2 else None
     dry_run  = (len(sys.argv) > 3 and sys.argv[3].lower() == "true")
     mode     = sys.argv[4] if len(sys.argv) > 4 else "apply"
-    audit    = True if len(sys.argv) < 6 else (sys.argv[5].lower() != "false")
-    run_table_load(yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit=audit)
+    audit_log_table = sys.argv[5] if len(sys.argv) > 5 else None
+    run_table_load(
+        yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit_log_table=audit_log_table
+    )
 
 if __name__ == "__main__":
     cli_entry()
