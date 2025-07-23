@@ -3,23 +3,25 @@
 from typing import Any, Dict, List, Tuple
 from pyspark.sql import SparkSession
 
-from layker.dry_run import DryRunLogger
-from layker.introspector import TableIntrospector
-from layker.sanitizer import sanitize_snapshot, normalize_dict
-
 class DatabricksTableLoader:
     """
-    Given a sanitized & validated YAML cfg, and a SparkSession,
-    orchestrates either CREATE or ALTER TABLE operations.
+    Accepts sanitized & validated YAML config, sanitized table snapshot, and a SparkSession.
+    Handles CREATE or ALTER TABLE operations only (no diffing or introspection).
     """
 
-    def __init__(self, cfg: Dict[str, Any], spark: SparkSession, dry_run: bool = False):
+    def __init__(
+        self,
+        cfg: Dict[str, Any],
+        spark: SparkSession,
+        dry_run: bool = False,
+        clean_snap: Dict[str, Any] = None,
+    ):
         self.cfg = cfg
         self.spark = spark
-        self.introspector = TableIntrospector(spark)
         self.dry_run = dry_run
-        self.dry_logger = DryRunLogger() if dry_run else None
+        self.clean_snap = clean_snap  # sanitized snapshot dict, or None for create
         self._modifications: List[str] = []
+        self._modifications_applied: bool = False
 
     @staticmethod
     def escape_sql(text: Any) -> str:
@@ -27,7 +29,7 @@ class DatabricksTableLoader:
 
     def _run_or_log(self, sql: str) -> None:
         if self.dry_run:
-            self.dry_logger.add(sql)
+            print(f"[DRY RUN] {sql}")
         else:
             self.spark.sql(sql)
 
@@ -45,13 +47,11 @@ class DatabricksTableLoader:
         cat, sch, tbl = self.cfg["catalog"], self.cfg["schema"], self.cfg["table"]
         fq = f"{cat}.{sch}.{tbl}"
 
-        if not self.introspector.table_exists(fq):
+        if self.clean_snap is None:
             self._create_table(fq)
         else:
-            raw_snap = self.introspector.snapshot(fq)
-            self._update_table(fq, raw_snap)
+            self._update_table(fq, self.clean_snap)
 
-        # ── Final summary ──
         if self._modifications:
             print("[FINAL SUMMARY] Changes applied:")
             for m in self._modifications:
@@ -124,14 +124,13 @@ class DatabricksTableLoader:
         self.apply_column_comments_and_tags(fq, cols)
         self.apply_column_check_constraints(fq, cols)
 
-    def _update_table(self, fq: str, raw_snap: Dict[str, Any]) -> None:
+    def _update_table(self, fq: str, snap: Dict[str, Any]) -> None:
         print("[INFO] Table exists; applying updates.")
-        snap = sanitize_snapshot(raw_snap)
         cols = self._get_columns_list()
 
-        # 1) Table properties diff
+        # Table properties diff (only applies new ones if needed)
         desired_props = self.cfg["properties"].get("table_properties", {})
-        if normalize_dict(desired_props) != snap["tbl_props"]:
+        if desired_props and desired_props != snap["tbl_props"]:
             print("[STEP] Applying table properties")
             props_sql = (
                 f"ALTER TABLE {fq} SET TBLPROPERTIES (\n  "
@@ -144,8 +143,8 @@ class DatabricksTableLoader:
             self._run_or_log(props_sql)
             self._modifications.append("Table properties updated")
 
-        # 2) Table tags
-        existing_tbl_tags = snap["tbl_tags"]
+        # Table tags
+        existing_tbl_tags = snap.get("tbl_tags", {})
         for k, v in self.cfg.get("tags", {}).items():
             if existing_tbl_tags.get(k) != str(v):
                 print(f"[STEP] Applying table tag: {k}")
@@ -155,13 +154,13 @@ class DatabricksTableLoader:
                 )
                 self._modifications.append(f"Table tag updated: {k}={v}")
 
-        # 3) Table-level constraints, filters, keys
+        # Table-level constraints, filters, keys
         self.apply_table_constraints(fq)
         self.apply_table_row_filters(fq)
         self.apply_table_unique_keys(fq)
         self.apply_table_foreign_keys(fq)
 
-        # 4) Columns: rename / add / drop
+        # Columns: rename / add / drop
         yaml_names = [c["name"] for c in cols]
         yaml_types = [c["datatype"].lower() for c in cols]
         tbl_names, tbl_types = zip(*snap["columns"]) if snap["columns"] else ((), ())
@@ -174,7 +173,6 @@ class DatabricksTableLoader:
                     print(f"[STEP] Renaming column: {t_name} → {y_name}")
                     self._run_or_log(f"ALTER TABLE {fq} RENAME COLUMN {t_name} TO {y_name}")
                     self._modifications.append(f"Renamed: {t_name}→{y_name}")
-                # illegal type-changes caught upstream
 
         # b) add new
         for y_name, y_type in zip(yaml_names[len(tbl_names):], yaml_types[len(tbl_names):]):
@@ -190,8 +188,8 @@ class DatabricksTableLoader:
             self._modifications.append(f"Dropped column: {col}")
 
         # 5) Column comments & tags
-        existing_comments = snap["comments"]
-        existing_ctags   = snap["col_tags"]
+        existing_comments = snap.get("comments", {})
+        existing_ctags   = snap.get("col_tags", {})
         for c in cols:
             name = c["name"]
             desired_comm = c.get("comment", "")
@@ -229,20 +227,12 @@ class DatabricksTableLoader:
         self._modifications.append("Table properties updated")
 
     def apply_table_tags(self, fq: str, yaml_tags: Dict[str, Any]) -> None:
-        existing = self.introspector.get_table_tags(fq)
-        for k, v in yaml_tags.items():
-            if existing.get(k) != str(v):
-                sql = (
-                    f"ALTER TABLE {fq} SET TAGS "
-                    f"('{self.escape_sql(k)}' = '{self.escape_sql(v)}')"
-                )
-                self._run_or_log(sql)
-                self._modifications.append(f"Table tag updated: {k}={v}")
+        if not yaml_tags:
+            return
+        # All tags are applied above during update/create logic
+        pass
 
     def apply_table_constraints(self, fq: str) -> None:
-        """
-        Apply table-level check constraints from YAML (actually supported!).
-        """
         tcc = self.cfg.get("table_check_constraints", {})
         for cname, cdict in tcc.items():
             expr = cdict.get("expression")
@@ -253,9 +243,6 @@ class DatabricksTableLoader:
                 self._modifications.append(f"Table check constraint applied: {cname}")
 
     def apply_table_row_filters(self, fq: str) -> None:
-        """
-        Apply row filters from YAML. (Not supported in Delta Lake, so log)
-        """
         rf = self.cfg.get("row_filters", {})
         for fname, fdict in rf.items():
             expr = fdict.get("expression")
@@ -264,9 +251,6 @@ class DatabricksTableLoader:
             self._modifications.append(f"Row filter (not applied): {fname}")
 
     def apply_table_unique_keys(self, fq: str) -> None:
-        """
-        Apply unique key constraints from YAML. (Not supported, future)
-        """
         uk = self.cfg.get("unique_keys", [])
         for idx, group in enumerate(uk):
             if group:
@@ -277,9 +261,6 @@ class DatabricksTableLoader:
                 self._modifications.append(f"Unique key (not applied): {name}")
 
     def apply_table_foreign_keys(self, fq: str) -> None:
-        """
-        Apply foreign key constraints from YAML. (Not supported, future)
-        """
         fks = self.cfg.get("foreign_keys", {})
         for fk_name, fk in fks.items():
             ref_tbl = fk.get("reference_table")
@@ -327,7 +308,6 @@ class DatabricksTableLoader:
             for cname, cdict in ccc.items():
                 expr = cdict.get("expression")
                 if expr:
-                    # Table-level only; log as not applied
                     sql = f"-- [FUTURE] ALTER TABLE {fq} ALTER COLUMN {name} ADD CONSTRAINT {cname} CHECK ({expr})"
                     print(f"[STEP] (skipped) Would apply column check constraint: {sql}")
                     self._modifications.append(f"Column check constraint (not applied): {name}.{cname}")
