@@ -2,17 +2,11 @@
 
 from typing import Dict, Any, Optional
 from pyspark.sql import SparkSession
-import sys
-import getpass
 import os
+import sys
+import yaml
+import getpass
 
-from layker.color import Color
-from layker.output import (
-    section_header,
-    print_success,
-    print_warning,
-    print_error,
-)
 from layker.sanitizer import (
     recursive_sanitize_comments,
     sanitize_metadata,
@@ -25,8 +19,13 @@ from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
 from layker.audit.logger import TableAuditLogger
-
-import yaml
+from layker.utils.color import Color
+from layker.utils.printer import (
+    section_header,
+    print_success,
+    print_warning,
+    print_error,
+)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
