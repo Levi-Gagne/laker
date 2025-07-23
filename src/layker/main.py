@@ -6,7 +6,7 @@ import sys
 import getpass
 import os
 
-from layker.color import Color as C
+from layker.color import Color
 from layker.output import (
     section_header,
     print_success,
@@ -85,12 +85,12 @@ def run_table_load(
         if not valid:
             print_error("Validation failed:")
             for err in errors:
-                print(f"    {C.candy_red}- {err}{C.r}")
+                print(f"    {Color.candy_red}- {err}{Color.r}")
             sys.exit(1)
         print_success("YAML validation passed.")
 
         if mode == "validate":
-            print(f"{C.b}{C.ivory}Mode 'validate': validation complete. No further action taken.{C.r}")
+            print(f"{Color.b}{Color.ivory}Mode 'validate': validation complete. No further action taken.{Color.r}")
             return
 
         fq = ddl_cfg.full_table_name
@@ -102,9 +102,9 @@ def run_table_load(
             sys.exit(2)
 
         # STEP 2: AUDIT LOGGER INIT
-        print(section_header("STEP 2/4: AUDIT LOGGING CONFIGURATION", color=C.sky_blue))
+        print(section_header("STEP 2/4: AUDIT LOGGING CONFIGURATION", color=Color.sky_blue))
         if audit_log_table:
-            print(f"{C.b}{C.ivory}Audit logging is {C.green}ENABLED{C.ivory}; using table: {C.aqua_blue}{audit_log_table}{C.r}")
+            print(f"{Color.b}{Color.ivory}Audit logging is {Color.green}ENABLED{Color.ivory}; using table: {Color.aqua_blue}{audit_log_table}{Color.r}")
             try:
                 audit_logger = TableAuditLogger(
                     spark,
@@ -123,7 +123,7 @@ def run_table_load(
                 sys.exit(2)
             run_id = get_run_id()
         else:
-            print(f"{C.b}{C.yellow}Audit logging is DISABLED for this run.{C.r}")
+            print(f"{Color.b}{Color.yellow}Audit logging is DISABLED for this run.{Color.r}")
             audit_logger = None
             run_id = None
 
@@ -136,12 +136,12 @@ def run_table_load(
             sys.exit(2)
 
         if not table_exists:
-            print(f"{C.b}{C.ivory}Table {C.aqua_blue}{fq}{C.ivory} not found.{C.r}")
+            print(f"{Color.b}{Color.ivory}Table {Color.aqua_blue}{fq}{Color.ivory} not found.{Color.r}")
             if mode == "diff":
                 print_warning(f"[DIFF] Would create table {fq}.")
                 return
             elif mode in ("apply", "all"):
-                print(f"{C.b}{C.ivory}Performing full create of {C.aqua_blue}{fq}{C.ivory}.{C.r}")
+                print(f"{Color.b}{Color.ivory}Performing full create of {Color.aqua_blue}{fq}{Color.ivory}.{Color.r}")
                 try:
                     loader.create_or_update_table()
                     print_success(f"[SUCCESS] Full create of {fq} completed.")
@@ -176,7 +176,7 @@ def run_table_load(
         if log_ddl:
             try:
                 log_comparison(yaml_path, cfg, fq, clean_snap, log_ddl)
-                print(f"{C.b}{C.ivory}Wrote comparison log to {C.aqua_blue}{log_ddl}{C.r}")
+                print(f"{Color.b}{Color.ivory}Wrote comparison log to {Color.aqua_blue}{log_ddl}{Color.r}")
             except Exception as e:
                 print_error(f"Could not write diff log: {e}")
 
@@ -188,7 +188,7 @@ def run_table_load(
             print_warning(f"[DIFF] Proposed changes for {fq}:")
             for k, v in diff.items():
                 if v:
-                    print(f"{C.b}{C.aqua_blue}{k}:{C.ivory} {v}{C.r}")
+                    print(f"{Color.b}{Color.aqua_blue}{k}:{Color.ivory} {v}{Color.r}")
             return
 
         if diff["type_changes"]:
@@ -201,7 +201,7 @@ def run_table_load(
             diff["renamed_columns"]
         )
         if schema_changes:
-            print(section_header("SCHEMA EVOLUTION PRE-FLIGHT", color=C.neon_green))
+            print(section_header("SCHEMA EVOLUTION PRE-FLIGHT", color=Color.neon_green))
             try:
                 TableYamlValidator.check_type_changes(cfg, raw_snap)
                 TableYamlValidator.check_delta_properties(clean_snap["tbl_props"])
@@ -213,7 +213,7 @@ def run_table_load(
             print_warning("No schema-evolution needed; skipping pre-flight.")
 
         if mode in ("apply", "all"):
-            print(section_header("APPLYING METADATA CHANGES", color=C.green))
+            print(section_header("APPLYING METADATA CHANGES", color=Color.green))
             try:
                 loader.create_or_update_table()
                 print_success(f"Updates for {fq} applied.")
@@ -243,7 +243,7 @@ def run_table_load(
     except Exception as e:
         print_error(f"Fatal error during run_table_load:\n{e}")
         import traceback
-        print(f"{C.red}{traceback.format_exc()}{C.r}")
+        print(f"{Color.red}{traceback.format_exc()}{Color.r}")
         sys.exit(1)
 
 def cli_entry():
