@@ -104,9 +104,8 @@ def run_table_load(
         fq = ddl_cfg.full_table_name
         try:
             introspector = TableIntrospector(spark)
-            loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
         except Exception as e:
-            print_error(f"Could not initialize introspector or loader: {e}")
+            print_error(f"Could not initialize introspector: {e}")
             sys.exit(2)
 
         # STEP 2: AUDIT LOGGER INIT
@@ -143,6 +142,23 @@ def run_table_load(
             print_error(f"Could not check table existence: {e}")
             sys.exit(2)
 
+        # --- Only change: loader now receives clean_snap (if table exists) ---
+        clean_snap = None
+        if table_exists:
+            try:
+                raw_snap   = introspector.snapshot(fq)
+                clean_snap = sanitize_snapshot(raw_snap)
+            except Exception as e:
+                print_error(f"Could not introspect/sanitize snapshot: {e}")
+                sys.exit(2)
+
+        # ---- Loader instantiation passes clean_snap, not raw config ----
+        try:
+            loader = DatabricksTableLoader(cfg, spark, dry_run=dry_run, clean_snap=clean_snap)
+        except Exception as e:
+            print_error(f"Could not initialize loader: {e}")
+            sys.exit(2)
+
         if not table_exists:
             print(f"{C.b}{C.ivory}Table {C.aqua_blue}{fq}{C.ivory} not found.{C.r}")
             if mode == "diff":
@@ -174,8 +190,6 @@ def run_table_load(
         # STEP 4: COMPARE & DIFF
         print(section_header("STEP 4/4: METADATA DIFF"))
         try:
-            raw_snap   = introspector.snapshot(fq)
-            clean_snap = sanitize_snapshot(raw_snap)
             diff       = compute_diff(cfg, clean_snap)
         except Exception as e:
             print_error(f"Error during introspection or diff: {e}")
