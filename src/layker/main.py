@@ -5,9 +5,14 @@ from pyspark.sql import SparkSession
 import sys
 import getpass
 import os
-import yaml
 
 from layker.color import Color as C
+from layker.output import (
+    section_header,
+    print_success,
+    print_warning,
+    print_error,
+)
 from layker.sanitizer import (
     recursive_sanitize_comments,
     sanitize_metadata,
@@ -21,23 +26,11 @@ from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
 from layker.audit.logger import TableAuditLogger
 
+import yaml
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
 ACTOR = os.environ.get("USER") or getpass.getuser() or "unknown_actor"
-
-def section_header(title, color=C.aqua_blue):
-    bar = f"{color}{C.b}" + "═" * 62 + C.r
-    title_line = f"{color}{C.b}║ {title.center(58)} ║{C.r}"
-    return f"\n{bar}\n{title_line}\n{bar}"
-
-def print_success(msg):
-    print(f"{C.b}{C.green}✔ {msg}{C.r}")
-
-def print_warning(msg):
-    print(f"{C.b}{C.yellow}! {msg}{C.r}")
-
-def print_error(msg):
-    print(f"{C.b}{C.candy_red}✘ {msg}{C.r}")
 
 def get_run_id():
     # Placeholder for run id logic; update to fetch Databricks job run id if needed
@@ -103,8 +96,9 @@ def run_table_load(
         fq = ddl_cfg.full_table_name
         try:
             introspector = TableIntrospector(spark)
+            loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
         except Exception as e:
-            print_error(f"Could not initialize introspector: {e}")
+            print_error(f"Could not initialize introspector or loader: {e}")
             sys.exit(2)
 
         # STEP 2: AUDIT LOGGER INIT
@@ -141,23 +135,6 @@ def run_table_load(
             print_error(f"Could not check table existence: {e}")
             sys.exit(2)
 
-        # --- Only change: loader now receives clean_snap (if table exists) ---
-        clean_snap = None
-        if table_exists:
-            try:
-                raw_snap   = introspector.snapshot(fq)
-                clean_snap = sanitize_snapshot(raw_snap)
-            except Exception as e:
-                print_error(f"Could not introspect/sanitize snapshot: {e}")
-                sys.exit(2)
-
-        # ---- Loader instantiation passes clean_snap, not raw config ----
-        try:
-            loader = DatabricksTableLoader(cfg, spark, dry_run=dry_run, clean_snap=clean_snap)
-        except Exception as e:
-            print_error(f"Could not initialize loader: {e}")
-            sys.exit(2)
-
         if not table_exists:
             print(f"{C.b}{C.ivory}Table {C.aqua_blue}{fq}{C.ivory} not found.{C.r}")
             if mode == "diff":
@@ -189,6 +166,8 @@ def run_table_load(
         # STEP 4: COMPARE & DIFF
         print(section_header("STEP 4/4: METADATA DIFF"))
         try:
+            raw_snap   = introspector.snapshot(fq)
+            clean_snap = sanitize_snapshot(raw_snap)
             diff       = compute_diff(cfg, clean_snap)
         except Exception as e:
             print_error(f"Error during introspection or diff: {e}")
