@@ -37,7 +37,8 @@ def compute_diff(
     # Table snapshot equivalents (if available, else default empty)
     snap_unique_keys   = snap.get("unique_keys", [])
     snap_foreign_keys  = snap.get("foreign_keys", {})
-    snap_tbl_checks    = snap.get("table_check_constraints", {})
+    # --- Update here: get constraints from 'tbl_constraints' (normalized) ---
+    snap_tbl_checks    = snap.get("tbl_constraints", {})
     snap_row_filters   = snap.get("row_filters", {})
 
     # 1) Columns added/dropped
@@ -107,9 +108,11 @@ def compute_diff(
         if yv != sv:
             foreign_key_changes.append((fk, sv, yv))
 
-    # --- NEW: Table-level check constraint diffs ---
+    # --- NEW: Table-level check constraint diffs (union logic) ---
+    all_cnames = set(yaml_tbl_checks.keys()).union(set(snap_tbl_checks.keys()))
     table_check_constraint_changes = []
-    for cname, yv in yaml_tbl_checks.items():
+    for cname in all_cnames:
+        yv = yaml_tbl_checks.get(cname)
         sv = snap_tbl_checks.get(cname)
         if yv != sv:
             table_check_constraint_changes.append((cname, sv, yv))

@@ -1,4 +1,4 @@
-# src/utils/load_table/table_introspector.py
+# /src/layker/introspector.py
 
 from typing import Any, Dict, List, Tuple
 from pyspark.sql import SparkSession
@@ -82,19 +82,33 @@ class TableIntrospector:
 
     def get_table_check_constraints(self, fq: str) -> Dict[str, Dict[str, str]]:
         """
-        Returns a dict of {constraint_name: {"expression": ...}} for all table-level check constraints.
+        Returns a dict of {constraint_name: {"expression": ...}} for all table-level check constraints,
+        merging constraints from SHOW TABLE CONSTRAINTS and Delta table properties.
         """
         constraints = {}
+        # 1. Native table-level CHECK constraints
         try:
             rows = self.spark.sql(f"SHOW TABLE CONSTRAINTS {fq}").collect()
             for r in rows:
-                # Only add table-level CHECK constraints (not PRIMARY/UNIQUE/FOREIGN, which aren't supported)
                 if r["constraint_type"] == "CHECK":
                     constraints[r["name"]] = {
                         "expression": r.get("expression", "")
                     }
         except Exception:
             pass
+
+        # 2. Delta constraints from tblproperties (delta.constraints.constraint_*)
+        try:
+            rows = self.spark.sql(f"SHOW TBLPROPERTIES {fq}").collect()
+            for r in rows:
+                k, v = r["key"], r["value"]
+                if k.startswith("delta.constraints.constraint_"):
+                    name = k.split("delta.constraints.constraint_")[-1]
+                    # If not already captured, add or update with Delta engine expression
+                    constraints[name] = {"expression": v}
+        except Exception:
+            pass
+
         return constraints
 
     def snapshot(self, fq: str) -> Dict[str, Any]:
@@ -105,5 +119,5 @@ class TableIntrospector:
             "tbl_tags":        self.get_table_tags(fq),
             "tbl_props":       self.get_table_properties(fq),
             "tbl_comment":     self.get_table_comment(fq),
-            "tbl_constraints": self.get_table_check_constraints(fq),   # <--- NEW
+            "tbl_constraints": self.get_table_check_constraints(fq),   # <--- merged/normalized
         }

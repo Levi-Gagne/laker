@@ -1,4 +1,4 @@
-# YAML from layker/schema/example.yaml
+# YAML from layker/example.yaml
 
 catalog: dq_dev
 schema: lmg_sandbox
@@ -283,7 +283,9 @@ tbl_props:
   delta.minreaderversion: '3'
   delta.minwriterversion: '7'
 tbl_comment: ''
-tbl_constraints: {}
+tbl_constraints:
+  '1':
+    expression: event_date <= current_date ( )
 col_masking_rules:
   example_id: ''
   minimal_col: ''
@@ -340,6 +342,8 @@ col_col_constraints:
   created_by: {}
   updated_at: {}
   updated_by: {}
+
+# Table-level CHECK constraints:
 
 # YAML Row Filters:
 

@@ -5,6 +5,7 @@ from pyspark.sql import SparkSession
 import sys
 import getpass
 import os
+import yaml
 
 from layker.color import Color as C
 from layker.sanitizer import (
@@ -20,10 +21,8 @@ from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
 from layker.audit.logger import TableAuditLogger
 
-import yaml
-
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "LakerAuditLog.yaml")
+AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
 ACTOR = os.environ.get("USER") or getpass.getuser() or "unknown_actor"
 
 def section_header(title, color=C.aqua_blue):
