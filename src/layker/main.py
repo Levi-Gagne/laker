@@ -10,12 +10,14 @@ from layker.sanitizer import (
     sanitize_metadata,
     sanitize_snapshot,
 )
-from layker.validator import TableYamlValidator
+
 from layker.introspector import TableIntrospector
 from layker.differences import compute_diff
 from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
+from layker.validators.params import validate_params
+from layker.validators.yaml   import TableYamlValidator
 from layker.audit.logger import TableAuditLogger
 from layker.utils.color import Color
 from layker.utils.printer import (
