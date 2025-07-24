@@ -1,5 +1,3 @@
-# src/layker/main.py
-
 from typing import Dict, Any, Optional
 from pyspark.sql import SparkSession
 import os
@@ -174,7 +172,8 @@ def run_table_load(
 
         if log_ddl:
             try:
-                log_comparison(yaml_path, cfg, fq, clean_snap, log_ddl)
+                # pass raw_snap instead of clean_snap for full introspector dump
+                log_comparison(yaml_path, cfg, fq, raw_snap, log_ddl)
                 print(f"{Color.b}{Color.ivory}Wrote comparison log to {Color.aqua_blue}{log_ddl}{Color.r}")
             except Exception as e:
                 print_error(f"Could not write diff log: {e}")
