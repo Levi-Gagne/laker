@@ -1,9 +1,14 @@
+# src/layker/main.py
+
 from typing import Dict, Any, Optional
 from pyspark.sql import SparkSession
 import os
 import sys
 import yaml
 import getpass
+
+from pathlib import Path
+import re
 
 from layker.sanitizer import (
     recursive_sanitize_comments,
@@ -45,7 +50,7 @@ def run_table_load(
     audit_log_table: Optional[str] = None,
 ) -> None:
     try:
-        # STEP 1: VALIDATE & SANITIZE YAML
+        # initialize SparkSession if not provided
         if spark is None:
             print_warning("No SparkSession passed; starting a new one.")
             try:
@@ -54,6 +59,12 @@ def run_table_load(
                 print_error(f"Could not start SparkSession: {e}")
                 sys.exit(2)
 
+        # PARAMETER VALIDATION
+        mode, env, audit_log_table = validate_params(
+            yaml_path, log_ddl, mode, env, audit_log_table, spark
+        )
+
+        # STEP 1: VALIDATE & SANITIZE YAML
         print(section_header("STEP 1/4: VALIDATING YAML"))
         try:
             ddl_cfg = TableSchemaConfig(yaml_path, env=env)
