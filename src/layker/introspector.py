@@ -20,11 +20,14 @@ class TableIntrospector:
 
     def get_columns_and_types(self, fq: str) -> List[Tuple[str, str]]:
         rows = self.spark.sql(f"DESCRIBE TABLE {fq}").collect()
-        return [
-            (r["col_name"], r["data_type"])
-            for r in rows
-            if r["col_name"] and not r["col_name"].startswith("#")
-        ]
+        seen = set()
+        out: List[Tuple[str, str]] = []
+        for r in rows:
+            name, typ = r["col_name"], r["data_type"]
+            if name and not name.startswith("#") and name not in seen:
+                out.append((name, typ))
+                seen.add(name)
+        return out
 
     def get_column_comments(self, fq: str) -> Dict[str, str]:
         out: Dict[str, str] = {}
@@ -59,7 +62,7 @@ class TableIntrospector:
     def get_table_properties(self, fq: str) -> Dict[str, str]:
         """
         Grabs only the properties you explicitly set on this table,
-        via SHOW TBLPROPERTIES, so we don’t pull in all the Delta engine defaults.
+        via SHOW TBLPROPERTIES.
         """
         props: Dict[str, str] = {}
         try:
@@ -83,41 +86,55 @@ class TableIntrospector:
     def get_table_check_constraints(self, fq: str) -> Dict[str, Dict[str, str]]:
         """
         Returns a dict of {constraint_name: {"expression": ...}} for all table-level check constraints,
-        merging constraints from SHOW TABLE CONSTRAINTS and Delta table properties.
+        merging native and Delta tblproperties.
         """
-        constraints = {}
-        # 1. Native table-level CHECK constraints
+        constraints: Dict[str, Dict[str, str]] = {}
+        # 1. Native CHECK constraints
         try:
             rows = self.spark.sql(f"SHOW TABLE CONSTRAINTS {fq}").collect()
             for r in rows:
                 if r["constraint_type"] == "CHECK":
-                    constraints[r["name"]] = {
-                        "expression": r.get("expression", "")
-                    }
+                    constraints[r["name"]] = {"expression": r.get("expression", "")}
         except Exception:
             pass
-
-        # 2. Delta constraints from tblproperties (delta.constraints.constraint_*)
+        # 2. Delta-engine constraints in tblproperties
         try:
             rows = self.spark.sql(f"SHOW TBLPROPERTIES {fq}").collect()
             for r in rows:
                 k, v = r["key"], r["value"]
                 if k.startswith("delta.constraints.constraint_"):
                     name = k.split("delta.constraints.constraint_")[-1]
-                    # If not already captured, add or update with Delta engine expression
                     constraints[name] = {"expression": v}
         except Exception:
             pass
-
         return constraints
+
+    def get_column_check_constraints(self, fq: str) -> Dict[str, Dict[str, str]]:
+        """
+        Returns a mapping column_name → {constraint_name: expression}.
+        """
+        col_checks: Dict[str, Dict[str, str]] = {}
+        try:
+            rows = self.spark.sql(f"SHOW TABLE CONSTRAINTS {fq}").collect()
+            for r in rows:
+                if r["constraint_type"].upper() == "CHECK":
+                    col = r.get("column_name")
+                    name = r["name"]
+                    expr = r.get("expression", "")
+                    if col:
+                        col_checks.setdefault(col, {})[name] = expr
+        except Exception:
+            pass
+        return col_checks
 
     def snapshot(self, fq: str) -> Dict[str, Any]:
         return {
-            "columns":         self.get_columns_and_types(fq),
-            "comments":        self.get_column_comments(fq),
-            "col_tags":        self.get_column_tags(fq),
-            "tbl_tags":        self.get_table_tags(fq),
-            "tbl_props":       self.get_table_properties(fq),
-            "tbl_comment":     self.get_table_comment(fq),
-            "tbl_constraints": self.get_table_check_constraints(fq),   # <--- merged/normalized
+            "columns":                   self.get_columns_and_types(fq),
+            "comments":                  self.get_column_comments(fq),
+            "col_tags":                  self.get_column_tags(fq),
+            "tbl_tags":                  self.get_table_tags(fq),
+            "tbl_props":                 self.get_table_properties(fq),
+            "tbl_comment":               self.get_table_comment(fq),
+            "tbl_constraints":           self.get_table_check_constraints(fq),
+            "column_check_constraints":  self.get_column_check_constraints(fq),
         }
