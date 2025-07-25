@@ -12,12 +12,13 @@ from layker.utils.printer import print_error, print_success
 
 def validate_and_sanitize_yaml(
     yaml_path: str,
-    env: Optional[str] = None
+    env: Optional[str] = None,
+    mode: str = "apply"
 ) -> Tuple[TableSchemaConfig, Dict[str, Any]]:
     """
     Validate and sanitize the YAML config file.
+    Exits the process if mode == 'validate' and YAML is valid.
     Returns: (ddl_cfg, cfg) tuple
-    Exits the process on error.
     """
     try:
         ddl_cfg = TableSchemaConfig(yaml_path, env=env)
@@ -51,4 +52,8 @@ def validate_and_sanitize_yaml(
             print(f"    {Color.candy_red}- {err}{Color.r}")
         sys.exit(1)
     print_success("YAML validation passed.")
+
+    if mode == "validate":
+        print(f"{Color.b}{Color.ivory}Mode 'validate': validation complete. No further action taken.{Color.r}")
+        sys.exit(0)
     return ddl_cfg, cfg
