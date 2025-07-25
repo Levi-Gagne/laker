@@ -17,12 +17,12 @@ from layker.sanitizer import (
 )
 
 from layker.introspector import TableIntrospector
-from layker.differences import compute_diff, log_comparison   # <-- UPDATED: import log_comparison here
+from layker.differences import compute_diff, log_comparison
 from layker.loader import DatabricksTableLoader
 from layker.yaml_reader import TableSchemaConfig
 from layker.validators.params import validate_params
 from layker.validators.yaml   import TableYamlValidator
-from layker.audit.logger import TableAuditLogger
+from layker.audit.controller import log_table_audit           # <-- use controller, not logger
 from layker.utils.color import Color
 from layker.utils.printer import (
     section_header,
@@ -31,6 +31,7 @@ from layker.utils.printer import (
     print_error,
 )
 from layker.utils.table import check_table_exists
+from layker.utils.spark import get_or_create_spark_session    # If you're using your new spark util
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
@@ -50,21 +51,16 @@ def run_table_load(
     audit_log_table: Optional[str] = None,
 ) -> None:
     try:
-        # initialize SparkSession if not provided
+        # ---- Spark init
         if spark is None:
-            print_warning("No SparkSession passed; starting a new one.")
-            try:
-                spark = SparkSession.builder.getOrCreate()
-            except Exception as e:
-                print_error(f"Could not start SparkSession: {e}")
-                sys.exit(2)
+            spark = get_or_create_spark_session()  # Uses your spark utility for robust handling
 
-        # PARAMETER VALIDATION
+        # ---- Param validation
         mode, env, audit_log_table = validate_params(
             yaml_path, log_ddl, mode, env, audit_log_table, spark
         )
 
-        # STEP 1: VALIDATE & SANITIZE YAML
+        # ---- STEP 1: VALIDATE & SANITIZE YAML
         print(section_header("STEP 1/4: VALIDATING YAML"))
         try:
             ddl_cfg = TableSchemaConfig(yaml_path, env=env)
@@ -104,78 +100,56 @@ def run_table_load(
             return
 
         fq = ddl_cfg.full_table_name
-        try:
-            introspector = TableIntrospector(spark)
-            loader       = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
-        except Exception as e:
-            print_error(f"Could not initialize introspector or loader: {e}")
-            sys.exit(2)
 
-        # STEP 2: AUDIT LOGGER INIT
-        print(section_header("STEP 2/4: AUDIT LOGGING CONFIGURATION", color=Color.sky_blue))
-        if audit_log_table:
-            print(f"{Color.b}{Color.ivory}Audit logging is {Color.green}ENABLED{Color.ivory}; using table: {Color.aqua_blue}{audit_log_table}{Color.r}")
-            try:
-                audit_logger = TableAuditLogger(
-                    spark,
-                    ddl_yaml_path=AUDIT_TABLE_YAML_PATH,
-                    log_table=audit_log_table,
-                    actor=ACTOR,
-                )
-            except FileNotFoundError as e:
-                print_error(f"Audit log YAML missing: {e}")
-                sys.exit(2)
-            except yaml.YAMLError as e:
-                print_error(f"Audit log YAML is malformed: {e}")
-                sys.exit(2)
-            except Exception as e:
-                print_error(f"Could not initialize TableAuditLogger: {e}")
-                sys.exit(2)
-            run_id = get_run_id()
-        else:
-            print(f"{Color.b}{Color.yellow}Audit logging is DISABLED for this run.{Color.r}")
-            audit_logger = None
-            run_id = None
-
-        # STEP 3: TABLE EXISTENCE
-        print(section_header("STEP 3/4: TABLE EXISTENCE & DIFF"))
+        # ---- STEP 2: TABLE EXISTENCE CHECK
+        print(section_header("STEP 2/4: TABLE EXISTENCE CHECK"))
         try:
-            table_exists = check_table_exists(spark, fq)   # <-- use your utils.table function now
+            table_exists = check_table_exists(spark, fq)
         except Exception as e:
             print_error(f"Could not check table existence: {e}")
             sys.exit(2)
 
+        # ---- STEP 3: AUDIT LOGGING SETUP/LOGIC NOW HANDLED IN CONTROLLER
+        print(section_header("STEP 3/4: AUDIT LOGGING CONFIGURATION", color=Color.sky_blue))
+        run_id = get_run_id() if audit_log_table else None
+
+        # ---- STEP 4: CREATE OR DIFF LOGIC
+        print(section_header("STEP 4/4: METADATA DIFF / TABLE ACTION"))
         if not table_exists:
             print(f"{Color.b}{Color.ivory}Table {Color.aqua_blue}{fq}{Color.ivory} not found.{Color.r}")
             if mode == "diff":
-                print_warning(f"[DIFF] Would create table {fq}.")
+                print_warning(f"[DIFF] No table to compare; would create table {fq}.")
                 return
             elif mode in ("apply", "all"):
-                print(f"{Color.b}{Color.ivory}Performing full create of {Color.aqua_blue}{fq}{Color.ivory}.{Color.r}")
                 try:
+                    loader = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
                     loader.create_or_update_table()
                     print_success(f"[SUCCESS] Full create of {fq} completed.")
                 except Exception as e:
                     print_error(f"Could not create table: {e}")
                     sys.exit(2)
-                # --- AUDIT: Log CREATE ---
-                if audit_logger:
-                    try:
-                        audit_logger.log_changes(
-                            diff={"table_created": True},
-                            cfg=cfg,
-                            fqn=fq,
-                            env=env,
-                            run_id=run_id,
-                        )
-                    except Exception as e:
-                        print_error(f"Audit log failed after table create: {e}")
-                print_success("Workflow complete. Table created and audit logged.")
+                # --- AUDIT: Log CREATE (all through controller)
+                if audit_log_table:
+                    log_table_audit(
+                        spark=spark,
+                        audit_yaml_path=AUDIT_TABLE_YAML_PATH,
+                        log_table=audit_log_table,
+                        actor=ACTOR,
+                        diff={"table_created": True},
+                        cfg=cfg,
+                        fqn=fq,
+                        env=env,
+                        run_id=run_id,
+                        announce=True,
+                    )
                 return
+            # Should never get here, but just in case
+            print_error("Unreachable: Table does not exist and mode is not 'diff', 'apply', or 'all'. Exiting.")
+            sys.exit(1)
 
-        # STEP 4: COMPARE & DIFF
-        print(section_header("STEP 4/4: METADATA DIFF"))
+        # ---- Table exists: Diff, and maybe apply changes
         try:
+            introspector = TableIntrospector(spark)
             raw_snap   = introspector.snapshot(fq)
             clean_snap = sanitize_snapshot(raw_snap)
             diff       = compute_diff(cfg, clean_snap)
@@ -185,7 +159,6 @@ def run_table_load(
 
         if log_ddl:
             try:
-                # pass raw_snap and clean_snap for logging
                 log_comparison(yaml_path, cfg, fq, raw_snap, log_ddl, clean_snap=clean_snap)
                 print(f"{Color.b}{Color.ivory}Wrote comparison log to {Color.aqua_blue}{log_ddl}{Color.r}")
             except Exception as e:
@@ -230,25 +203,26 @@ def run_table_load(
         if mode in ("apply", "all"):
             print(section_header("APPLYING METADATA CHANGES", color=Color.green))
             try:
+                loader = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
                 loader.create_or_update_table()
                 print_success(f"Updates for {fq} applied.")
             except Exception as e:
                 print_error(f"Failed to apply updates: {e}")
                 sys.exit(2)
-            # --- AUDIT: Log UPDATE ---
-            if audit_logger:
-                try:
-                    audit_logger.log_changes(
-                        diff=diff,
-                        cfg=cfg,
-                        fqn=fq,
-                        env=env,
-                        run_id=run_id,
-                    )
-                    print_success("Workflow complete. Updates applied and audit logged.")
-                except Exception as e:
-                    print_error(f"Audit log failed after update: {e}")
-                    print_warning("Workflow completed but audit logging failed.")
+            # --- AUDIT: Log UPDATE (all through controller)
+            if audit_log_table:
+                log_table_audit(
+                    spark=spark,
+                    audit_yaml_path=AUDIT_TABLE_YAML_PATH,
+                    log_table=audit_log_table,
+                    actor=ACTOR,
+                    diff=diff,
+                    cfg=cfg,
+                    fqn=fq,
+                    env=env,
+                    run_id=run_id,
+                    announce=True,
+                )
 
     except SystemExit:
         raise
