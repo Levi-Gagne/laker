@@ -1,4 +1,4 @@
-# src/layker/yaml_reader.py
+# src/layker/yaml.py
 
 import yaml
 from typing import Any, Dict, List, Optional, Union
