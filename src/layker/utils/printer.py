@@ -1,4 +1,4 @@
-# src/layker/output.py
+# src/layker/utils/printer.py
 
 from laker.utils.color import Color
 
