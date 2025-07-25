@@ -22,16 +22,20 @@ from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
 from layker.yaml_reader import TableSchemaConfig
 from layker.validators.params import validate_params
-from layker.validators.yaml   import TableYamlValidator
+from layker.validators.yaml import TableYamlValidator
+from layker.validators.evolution import (
+    check_type_changes,
+    check_delta_properties,
+)
 from layker.audit.logger import TableAuditLogger
 from layker.utils.color import Color
-from layker.utils.table import table_exists
 from layker.utils.printer import (
     section_header,
     print_success,
     print_warning,
     print_error,
 )
+from layker.utils.table import table_exists
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
@@ -138,15 +142,15 @@ def run_table_load(
             audit_logger = None
             run_id = None
 
-        # STEP 3: TABLE EXISTENCE (now uses the new util)
+        # STEP 3: TABLE EXISTENCE
         print(section_header("STEP 3/4: TABLE EXISTENCE & DIFF"))
         try:
-            table_exists_flag = table_exists(spark, fq)
+            exists = table_exists(spark, fq)
         except Exception as e:
             print_error(f"Could not check table existence: {e}")
             sys.exit(2)
 
-        if not table_exists_flag:
+        if not exists:
             print(f"{Color.b}{Color.ivory}Table {Color.aqua_blue}{fq}{Color.ivory} not found.{Color.r}")
             if mode == "diff":
                 print_warning(f"[DIFF] Would create table {fq}.")
@@ -215,8 +219,8 @@ def run_table_load(
         if schema_changes:
             print(section_header("SCHEMA EVOLUTION PRE-FLIGHT", color=Color.neon_green))
             try:
-                TableYamlValidator.check_type_changes(cfg, raw_snap)
-                TableYamlValidator.check_delta_properties(clean_snap["tbl_props"])
+                check_type_changes(cfg, raw_snap)
+                check_delta_properties(clean_snap["tbl_props"])
             except Exception as e:
                 print_error(f"Pre-flight failed: {e}")
                 sys.exit(2)
