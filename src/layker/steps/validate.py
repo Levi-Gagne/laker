@@ -14,11 +14,21 @@ def validate_and_sanitize_yaml(
     yaml_path: str,
     env: Optional[str] = None,
     mode: str = "apply"
-) -> Tuple[TableSchemaConfig, Dict[str, Any]]:
+) -> Tuple[TableSchemaConfig, Dict[str, Any], str]:
     """
     Validate and sanitize the YAML config file.
-    Exits the process if mode == 'validate' and YAML is valid.
-    Returns: (ddl_cfg, cfg) tuple
+
+    Args:
+        yaml_path: Path to the YAML file.
+        env: Optional environment override.
+        mode: Workflow mode ('apply', 'validate', etc.)
+
+    Returns:
+        Tuple of (TableSchemaConfig, sanitized_cfg_dict, fully_qualified_table_name)
+        Exits process on failure or if mode == 'validate'.
+
+    Exits:
+        sys.exit() with error message on any failure or if validation-only mode.
     """
     try:
         ddl_cfg = TableSchemaConfig(yaml_path, env=env)
@@ -56,4 +66,6 @@ def validate_and_sanitize_yaml(
     if mode == "validate":
         print(f"{Color.b}{Color.ivory}Mode 'validate': validation complete. No further action taken.{Color.r}")
         sys.exit(0)
-    return ddl_cfg, cfg
+    # Add the fully qualified table name to the return
+    fq = ddl_cfg.full_table_name
+    return ddl_cfg, cfg, fq
