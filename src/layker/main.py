@@ -44,8 +44,7 @@ def run_table_load(
 
         # ---- STEP 1: VALIDATE & SANITIZE YAML
         print(section_header("STEP 1/4: VALIDATING YAML"))
-        ddl_cfg, cfg = validate_and_sanitize_yaml(yaml_path, env=env, mode=mode)
-        fq = ddl_cfg.full_table_name
+        ddl_cfg, cfg, fq = validate_and_sanitize_yaml(yaml_path, env=env, mode=mode)
 
         # ---- STEP 2: TABLE EXISTENCE CHECK (now via utils.table)
         print(section_header("STEP 2/4: TABLE EXISTENCE CHECK"))
