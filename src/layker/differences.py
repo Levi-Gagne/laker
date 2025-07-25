@@ -1,6 +1,8 @@
 # src/layker/differences.py
 
 from typing import Any, Dict, List, Tuple
+import yaml
+from pathlib import Path
 
 def normalize_dict(d: Dict[Any, Any]) -> Dict[str, str]:
     return {str(k).lower(): str(v) for k, v in d.items()}
@@ -37,7 +39,6 @@ def compute_diff(
     # Table snapshot equivalents (if available, else default empty)
     snap_unique_keys   = snap.get("unique_keys", [])
     snap_foreign_keys  = snap.get("foreign_keys", {})
-    # --- Update here: get constraints from 'tbl_constraints' (normalized) ---
     snap_tbl_checks    = snap.get("tbl_constraints", {})
     snap_row_filters   = snap.get("row_filters", {})
 
@@ -150,3 +151,49 @@ def compute_diff(
         "row_filter_changes":      row_filter_changes,
         "column_check_constraint_changes": column_check_constraint_changes,
     }
+
+def log_comparison(
+    yaml_path: str,
+    cfg: Dict[str, Any],
+    fq: str,
+    raw_snap: Dict[str, Any],
+    filepath: str,
+    clean_snap: Dict[str, Any] = None
+) -> None:
+    """
+    Write the raw introspector snapshot and the cleaned snapshot (if provided)
+    to `filepath` for debugging. Auto-creates parent dirs.
+    NOTE: `clean_snap` should be provided by caller—no sanitizer import here.
+    """
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, "w") as f:
+        # Dump YAML config
+        f.write(f"# YAML from {yaml_path}\n\n")
+        yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
+
+        # Dump the _raw_ introspector snapshot
+        f.write(f"\n\n# --------- RAW introspector snapshot: {fq} ---------\n\n")
+        yaml.safe_dump(raw_snap, f, default_flow_style=False, sort_keys=False)
+
+        # Dump the cleaned snapshot if provided
+        if clean_snap is not None:
+            f.write(f"\n\n# --------- CLEANED snapshot: {fq} ---------\n\n")
+            yaml.safe_dump(clean_snap, f, default_flow_style=False, sort_keys=False)
+
+        # Highlight important blocks if present
+        blocks = [
+            ("Table-level CHECK constraints",   raw_snap.get("tbl_constraints")),
+            ("YAML Row Filters",                cfg.get("row_filters")),
+            ("Column-level CHECK constraints",  (clean_snap or {}).get("column_check_constraints") if clean_snap else None),
+            ("Column Masking Rules",            (clean_snap or {}).get("col_masking_rules") if clean_snap else None),
+            ("Column Default Values",           (clean_snap or {}).get("col_default_values") if clean_snap else None),
+            ("Column Variable Values",          (clean_snap or {}).get("col_variable_values") if clean_snap else None),
+            ("Foreign Keys",                    cfg.get("foreign_keys")),
+            ("Unique Keys",                     cfg.get("unique_keys")),
+            ("Primary Key",                     cfg.get("primary_key")),
+            ("Partitioned By",                  cfg.get("partitioned_by")),
+        ]
+        for name, val in blocks:
+            if val:
+                f.write(f"\n# {name}:\n")
+                yaml.safe_dump(val, f, default_flow_style=False, sort_keys=False)
