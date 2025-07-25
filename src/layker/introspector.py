@@ -11,12 +11,6 @@ class TableIntrospector:
     def __init__(self, spark: SparkSession):
         self.spark = spark
 
-    def table_exists(self, fq: str) -> bool:
-        try:
-            self.spark.sql(f"DESCRIBE TABLE {fq}")
-            return True
-        except Exception:
-            return False
 
     def get_columns_and_types(self, fq: str) -> List[Tuple[str, str]]:
         rows = self.spark.sql(f"DESCRIBE TABLE {fq}").collect()
