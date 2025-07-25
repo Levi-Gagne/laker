@@ -1,22 +1,31 @@
-# src/layker/main.py
-
 import os
+import re
 import sys
+import yaml
 import getpass
+from pathlib import Path
 from typing import Dict, Any, Optional
+
 from pyspark.sql import SparkSession
 
 from layker.steps.validate import validate_and_sanitize_yaml
-from layker.steps.loader import apply_loader_step
+from layker.utils.table import table_exists
 from layker.introspector import TableIntrospector
 from layker.differences import compute_diff, log_comparison
+from layker.loader import DatabricksTableLoader
 from layker.yaml import TableSchemaConfig
 from layker.validators.params import validate_params
 from layker.audit.controller import log_table_audit
 from layker.utils.color import Color
-from layker.utils.printer import (section_header, print_success, print_warning, print_error)
-from layker.utils.table import table_exists
+from layker.utils.printer import (
+    section_header,
+    print_success,
+    print_warning,
+    print_error,
+)
 from layker.utils.spark import get_or_create_spark_session
+from layker.validators.differences import check_type_changes
+from layker.steps.evolution import handle_schema_evolution
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
@@ -41,7 +50,7 @@ def run_table_load(
             yaml_path, log_ddl, mode, env, audit_log_table, spark
         )
 
-        # ---- STEP 1: VALIDATE & SANITIZE YAML (via steps/validate)
+        # ---- STEP 1: VALIDATE & SANITIZE YAML
         print(section_header("STEP 1/4: VALIDATING YAML"))
         ddl_cfg, cfg, fq = validate_and_sanitize_yaml(yaml_path, env=env, mode=mode)
         # (If mode == "validate", the above call will sys.exit(0))
@@ -54,8 +63,14 @@ def run_table_load(
                 print_warning(f"[DIFF] No table to compare; would create table {fq}.")
                 return
             elif mode in ("apply", "all"):
-                apply_loader_step(cfg, spark, dry_run, fq, action_desc="Full create")
-                # --- AUDIT: Log CREATE
+                try:
+                    loader = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
+                    loader.create_or_update_table()
+                    print_success(f"[SUCCESS] Full create of {fq} completed.")
+                except Exception as e:
+                    print_error(f"Could not create table: {e}")
+                    sys.exit(2)
+                # --- AUDIT: Log CREATE (all through controller)
                 if audit_log_table:
                     log_table_audit(
                         spark=spark,
@@ -72,79 +87,65 @@ def run_table_load(
                 return
             print_error("Unreachable: Table does not exist and mode is not 'diff', 'apply', or 'all'. Exiting.")
             sys.exit(1)
-        # ---- Table exists: Diff, and maybe apply changes (else block)
-        print(f"{Color.b}{Color.ivory}Table {Color.aqua_blue}{fq}{Color.ivory} exists.{Color.r}")
-
-        try:
-            introspector = TableIntrospector(spark)
-            raw_snap   = introspector.snapshot(fq)
-            from layker.sanitizer import sanitize_snapshot
-            clean_snap = sanitize_snapshot(raw_snap)
-            diff       = compute_diff(cfg, clean_snap)
-        except Exception as e:
-            print_error(f"Error during introspection or diff: {e}")
-            sys.exit(2)
-
-        if log_ddl:
-            try:
-                log_comparison(yaml_path, cfg, fq, raw_snap, log_ddl, clean_snap=clean_snap)
-                print(f"{Color.b}{Color.ivory}Wrote comparison log to {Color.aqua_blue}{log_ddl}{Color.r}")
-            except Exception as e:
-                print_error(f"Could not write diff log: {e}")
-
-        if not any(diff.values()):
-            print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
-            return
-
-        if mode == "diff":
-            print_warning(f"[DIFF] Proposed changes for {fq}:")
-            for k, v in diff.items():
-                if v:
-                    print(f"{Color.b}{Color.aqua_blue}{k}:{Color.ivory} {v}{Color.r}")
-            return
-
-        if diff["type_changes"]:
-            print_error("Type changes detected; in-place type change is not supported. Exiting.")
-            sys.exit(1)
-
-        schema_changes = (
-            diff["added_columns"] or
-            diff["dropped_columns"] or
-            diff["renamed_columns"]
-        )
-        if schema_changes:
-            print(section_header("SCHEMA EVOLUTION PRE-FLIGHT", color=Color.neon_green))
-            try:
-                from layker.validators.evolution import (
-                    check_type_changes,
-                    check_delta_properties,
-                )
-                check_type_changes(cfg, raw_snap)
-                check_delta_properties(clean_snap["tbl_props"])
-            except Exception as e:
-                print_error(f"Pre-flight failed: {e}")
-                sys.exit(2)
-            print_success("Pre-flight checks passed.")
         else:
-            print_warning("No schema-evolution needed; skipping pre-flight.")
+            # ---- Table exists: Diff, and maybe apply changes
+            try:
+                introspector = TableIntrospector(spark)
+                raw_snap   = introspector.snapshot(fq)
+                clean_snap = sanitize_snapshot(raw_snap)
+                diff       = compute_diff(cfg, clean_snap)
+            except Exception as e:
+                print_error(f"Error during introspection or diff: {e}")
+                sys.exit(2)
 
-        if mode in ("apply", "all"):
-            print(section_header("APPLYING METADATA CHANGES", color=Color.green))
-            apply_loader_step(cfg, spark, dry_run, fq, action_desc="Update")
-            # --- AUDIT: Log UPDATE
-            if audit_log_table:
-                log_table_audit(
-                    spark=spark,
-                    audit_yaml_path=AUDIT_TABLE_YAML_PATH,
-                    log_table=audit_log_table,
-                    actor=ACTOR,
-                    diff=diff,
-                    cfg=cfg,
-                    fqn=fq,
-                    env=env,
-                    run_id=None,
-                    announce=True,
-                )
+            if log_ddl:
+                try:
+                    log_comparison(yaml_path, cfg, fq, raw_snap, log_ddl, clean_snap=clean_snap)
+                    print(f"{Color.b}{Color.ivory}Wrote comparison log to {Color.aqua_blue}{log_ddl}{Color.r}")
+                except Exception as e:
+                    print_error(f"Could not write diff log: {e}")
+
+            if not any(diff.values()):
+                print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
+                return
+
+            if mode == "diff":
+                print_warning(f"[DIFF] Proposed changes for {fq}:")
+                for k, v in diff.items():
+                    if v:
+                        print(f"{Color.b}{Color.aqua_blue}{k}:{Color.ivory} {v}{Color.r}")
+                return
+
+            if diff["type_changes"]:
+                print_error("Type changes detected; in-place type change is not supported. Exiting.")
+                sys.exit(1)
+
+            # ---- SCHEMA EVOLUTION PRE-FLIGHT
+            handle_schema_evolution(diff, clean_snap["tbl_props"])
+
+            if mode in ("apply", "all"):
+                print(section_header("APPLYING METADATA CHANGES", color=Color.green))
+                try:
+                    loader = DatabricksTableLoader(cfg, spark, dry_run=dry_run)
+                    loader.create_or_update_table()
+                    print_success(f"Updates for {fq} applied.")
+                except Exception as e:
+                    print_error(f"Failed to apply updates: {e}")
+                    sys.exit(2)
+                # --- AUDIT: Log UPDATE (all through controller)
+                if audit_log_table:
+                    log_table_audit(
+                        spark=spark,
+                        audit_yaml_path=AUDIT_TABLE_YAML_PATH,
+                        log_table=audit_log_table,
+                        actor=ACTOR,
+                        diff=diff,
+                        cfg=cfg,
+                        fqn=fq,
+                        env=env,
+                        run_id=None,
+                        announce=True,
+                    )
 
     except SystemExit:
         raise
