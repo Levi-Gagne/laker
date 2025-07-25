@@ -20,7 +20,7 @@ from layker.introspector import TableIntrospector
 from layker.differences import compute_diff
 from layker.loader import DatabricksTableLoader
 from layker.differences_logger import log_comparison
-from layker.yaml_reader import TableSchemaConfig
+from layker.yaml import TableSchemaConfig
 from layker.validators.params import validate_params
 from layker.validators.yaml import TableYamlValidator
 from layker.validators.evolution import (
