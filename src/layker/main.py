@@ -17,16 +17,11 @@ from layker.sanitizer import (
 )
 
 from layker.introspector import TableIntrospector
-from layker.differences import compute_diff
+from layker.differences import compute_diff, log_comparison   # <-- UPDATED: import log_comparison here
 from layker.loader import DatabricksTableLoader
-from layker.differences_logger import log_comparison
-from layker.yaml import TableSchemaConfig
+from layker.yaml_reader import TableSchemaConfig
 from layker.validators.params import validate_params
-from layker.validators.yaml import TableYamlValidator
-from layker.validators.evolution import (
-    check_type_changes,
-    check_delta_properties,
-)
+from layker.validators.yaml   import TableYamlValidator
 from layker.audit.logger import TableAuditLogger
 from layker.utils.color import Color
 from layker.utils.printer import (
@@ -35,7 +30,7 @@ from layker.utils.printer import (
     print_warning,
     print_error,
 )
-from layker.utils.table import table_exists
+from layker.utils.table import check_table_exists
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
@@ -145,12 +140,12 @@ def run_table_load(
         # STEP 3: TABLE EXISTENCE
         print(section_header("STEP 3/4: TABLE EXISTENCE & DIFF"))
         try:
-            exists = table_exists(spark, fq)
+            table_exists = check_table_exists(spark, fq)   # <-- use your utils.table function now
         except Exception as e:
             print_error(f"Could not check table existence: {e}")
             sys.exit(2)
 
-        if not exists:
+        if not table_exists:
             print(f"{Color.b}{Color.ivory}Table {Color.aqua_blue}{fq}{Color.ivory} not found.{Color.r}")
             if mode == "diff":
                 print_warning(f"[DIFF] Would create table {fq}.")
@@ -190,8 +185,8 @@ def run_table_load(
 
         if log_ddl:
             try:
-                # pass raw_snap instead of clean_snap for full introspector dump
-                log_comparison(yaml_path, cfg, fq, raw_snap, log_ddl)
+                # pass raw_snap and clean_snap for logging
+                log_comparison(yaml_path, cfg, fq, raw_snap, log_ddl, clean_snap=clean_snap)
                 print(f"{Color.b}{Color.ivory}Wrote comparison log to {Color.aqua_blue}{log_ddl}{Color.r}")
             except Exception as e:
                 print_error(f"Could not write diff log: {e}")
@@ -219,6 +214,10 @@ def run_table_load(
         if schema_changes:
             print(section_header("SCHEMA EVOLUTION PRE-FLIGHT", color=Color.neon_green))
             try:
+                from layker.validators.evolution import (
+                    check_type_changes,
+                    check_delta_properties,
+                )
                 check_type_changes(cfg, raw_snap)
                 check_delta_properties(clean_snap["tbl_props"])
             except Exception as e:
