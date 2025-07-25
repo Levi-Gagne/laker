@@ -25,6 +25,7 @@ from layker.validators.params import validate_params
 from layker.validators.yaml   import TableYamlValidator
 from layker.audit.logger import TableAuditLogger
 from layker.utils.color import Color
+from layker.utils.table import table_exists
 from layker.utils.printer import (
     section_header,
     print_success,
@@ -137,15 +138,15 @@ def run_table_load(
             audit_logger = None
             run_id = None
 
-        # STEP 3: TABLE EXISTENCE
+        # STEP 3: TABLE EXISTENCE (now uses the new util)
         print(section_header("STEP 3/4: TABLE EXISTENCE & DIFF"))
         try:
-            table_exists = introspector.table_exists(fq)
+            table_exists_flag = table_exists(spark, fq)
         except Exception as e:
             print_error(f"Could not check table existence: {e}")
             sys.exit(2)
 
-        if not table_exists:
+        if not table_exists_flag:
             print(f"{Color.b}{Color.ivory}Table {Color.aqua_blue}{fq}{Color.ivory} not found.{Color.r}")
             if mode == "diff":
                 print_warning(f"[DIFF] Would create table {fq}.")
