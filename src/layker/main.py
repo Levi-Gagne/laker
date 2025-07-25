@@ -117,7 +117,8 @@ def run_table_load(
                     if v:
                         print(f"{Color.b}{Color.aqua_blue}{k}:{Color.ivory} {v}{Color.r}")
                 return
-
+            
+            # REMEMBER: Call this check from 'src/layker/validators/differences.py' & add additional checks
             if diff["type_changes"]:
                 print_error("Type changes detected; in-place type change is not supported. Exiting.")
                 sys.exit(1)
