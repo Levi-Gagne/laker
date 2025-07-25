@@ -1,37 +1,28 @@
 # src/layker/main.py
 
-from typing import Dict, Any, Optional
-from pyspark.sql import SparkSession
 import os
+import re
 import sys
 import yaml
 import getpass
-
 from pathlib import Path
-import re
+from typing import Dict, Any, Optional
 
-from layker.sanitizer import (
-    recursive_sanitize_comments,
-    sanitize_metadata,
-    sanitize_snapshot,
-)
+from pyspark.sql import SparkSession
 
+from layker.sanitizer import (recursive_sanitize_comments, sanitize_metadata, sanitize_snapshot)
 from layker.introspector import TableIntrospector
 from layker.differences import compute_diff, log_comparison
 from layker.loader import DatabricksTableLoader
-from layker.yaml_reader import TableSchemaConfig
+from layker.yaml import TableSchemaConfig
 from layker.validators.params import validate_params
 from layker.validators.yaml   import TableYamlValidator
-from layker.audit.controller import log_table_audit           # <-- use controller, not logger
+from layker.audit.controller import log_table_audit
 from layker.utils.color import Color
-from layker.utils.printer import (
-    section_header,
-    print_success,
-    print_warning,
-    print_error,
-)
+from layker.utils.printer import (section_header, print_success, print_warning, print_error)
 from layker.utils.table import check_table_exists
-from layker.utils.spark import get_or_create_spark_session    # If you're using your new spark util
+from layker.utils.spark import get_or_create_spark_session
+
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_TABLE_YAML_PATH = os.path.join(REPO_ROOT, "layker", "audit", "layker_audit.yaml")
