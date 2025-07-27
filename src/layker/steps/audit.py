@@ -1,38 +1,48 @@
 # src/layker/steps/audit.py
 
 import os
+import getpass
+from typing import Dict, Any
+
+from layker.steps.loader import apply_loader_step
+from layker.utils.table import table_exists
 from layker.audit.logger import TableAuditLogger
-from layker.loader import DatabricksTableLoader
+from layker.yaml import TableSchemaConfig
 
 def apply_audit_log_step(
-    spark,
-    audit_yaml_path,
-    diff,
-    cfg,
-    env,
-    admin_user="unknown_actor"
-):
+    spark,                   # SparkSession
+    audit_table_yaml_path: str,
+    diff: Dict[str, Any],
+    cfg: Dict[str, Any],
+    env: str,
+) -> None:
     """
-    Handles logging to the audit table, creating it if missing.
+    Ensures the audit log table exists, creating if needed, then logs the change event.
     """
+    # Load YAML config for the audit table structure
+    audit_cfg = TableSchemaConfig(audit_table_yaml_path, env=env)
+    fq = audit_cfg.full_table_name
+
+    # Use os environment, else default to 'AdminUser'
+    admin_user = os.environ.get("USER") or getpass.getuser() or "AdminUser"
+
     logger = TableAuditLogger(
         spark=spark,
-        ddl_yaml_path=audit_yaml_path,
-        admin_user=admin_user,
+        ddl_yaml_path=audit_table_yaml_path,
+        log_table=fq,
+        actor=admin_user,
     )
-    # Ensure the table exists, create if missing (using the loader)
-    if not logger._table_exists():
-        print(f"[AUDIT] Audit log table does not exist. Creating from {audit_yaml_path}...")
-        with open(audit_yaml_path) as f:
-            audit_cfg = yaml.safe_load(f)
-        DatabricksTableLoader(audit_cfg, spark).create_or_update_table()
-        logger = TableAuditLogger(
-            spark=spark,
-            ddl_yaml_path=audit_yaml_path,
-            admin_user=admin_user,
-        )
-    logger.log_changes(
-        diff=diff,
-        cfg=cfg,
-        env=env,
-    )
+
+    if not table_exists(spark, fq):
+        print(f"[AUDIT] Audit table {fq} not found; creating now...")
+        apply_loader_step(audit_cfg._config, spark, dry_run=False, fq=fq, action_desc="Audit table create")
+    else:
+        try:
+            logger.log_changes(
+                diff=diff,
+                cfg=cfg,
+                env=env,
+            )
+            print(f"[AUDIT] Event logged to {fq}")
+        except Exception as e:
+            print(f"[AUDIT][ERROR] Could not log to {fq}: {e}")
