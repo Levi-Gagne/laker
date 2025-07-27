@@ -1,6 +1,12 @@
-import uuid, json, yaml, hashlib
+# src/layker/audit/logger.py
+
+import uuid
+import json
+import yaml
+import hashlib
 from datetime import datetime
-from pyspark.sql import Row
+from typing import Any, Dict, Optional, List
+from pyspark.sql import Row, SparkSession
 
 class TableAuditLogger:
     """
@@ -17,7 +23,6 @@ class TableAuditLogger:
         'column_masking_rule', 'column_default_value', 'column_variable_value'
     }
 
-    # ---- EVENT MAPPING ----
     EVENT_MAP = {
         "added_columns": dict(
             change_type="add_column",
@@ -125,7 +130,13 @@ class TableAuditLogger:
         ),
     }
 
-    def __init__(self, spark, ddl_yaml_path, log_table=None, actor=None):
+    def __init__(
+        self,
+        spark: SparkSession,
+        ddl_yaml_path: str,
+        log_table: Optional[str] = None,
+        actor: Optional[str] = None,
+    ) -> None:
         self.spark = spark
         self.ddl_yaml_path = ddl_yaml_path
         self.ddl = self._load_ddl_yaml()
@@ -145,17 +156,17 @@ class TableAuditLogger:
         if "change_hash" not in self.columns:
             self.columns.append("change_hash")
 
-    def _load_ddl_yaml(self):
+    def _load_ddl_yaml(self) -> Dict[str, Any]:
         with open(self.ddl_yaml_path) as f:
             return yaml.safe_load(f)
-    
-    def _get_columns(self):
+
+    def _get_columns(self) -> List[str]:
         return [v["name"] for k, v in sorted(self.ddl["columns"].items(), key=lambda x: int(x[0]))]
-    
-    def _table_exists(self):
+
+    def _table_exists(self) -> bool:
         return self.spark.catalog.tableExists(self.log_table)
-    
-    def _create_table(self):
+
+    def _create_table(self) -> None:
         cols = []
         for k, v in sorted(self.ddl["columns"].items(), key=lambda x: int(x[0])):
             cdef = f"{v['name']} {v['datatype']}"
@@ -168,12 +179,14 @@ class TableAuditLogger:
         self.spark.sql(f"CREATE TABLE IF NOT EXISTS {self.log_table} ({schema}) USING DELTA")
         print(f"[AUDIT] Table {self.log_table} created.")
 
-    def _j(self, val):
-        if val is None: return None
-        if isinstance(val, (dict, list)): return json.dumps(val, default=str)
+    def _j(self, val: Any) -> Optional[str]:
+        if val is None:
+            return None
+        if isinstance(val, (dict, list)):
+            return json.dumps(val, default=str)
         return str(val)
-    
-    def _enforce_allowed(self, field, value):
+
+    def _enforce_allowed(self, field: str, value: Any) -> Any:
         if field == "env":
             val = (value or "dev").lower()
             if val not in self.ALLOWED_ENVS:
@@ -189,12 +202,12 @@ class TableAuditLogger:
             return value
         return value
 
-    def _make_change_hash(self, row_dict):
+    def _make_change_hash(self, row_dict: Dict[str, Any]) -> str:
         relevant = {k: row_dict.get(k) for k in self.columns if k not in {"change_id", "created_at", "change_hash"}}
         encoded = json.dumps(relevant, sort_keys=True, default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
-    def _row(self, **kw):
+    def _row(self, **kw) -> Row:
         now = datetime.utcnow()
         out = {k: None for k in self.columns}
         out['change_id']       = str(uuid.uuid4())
@@ -221,36 +234,46 @@ class TableAuditLogger:
         out['change_hash']     = self._make_change_hash(out)
         return Row(**out)
 
-    def _get_next_create_num(self, fqn):
+    def _get_next_create_num(self, fqn: str) -> int:
         df = self.spark.sql(f"SELECT batch_id FROM {self.log_table} WHERE fqn = '{fqn}' AND change_category = 'create'")
         batch_ids = [row['batch_id'] for row in df.collect()]
         nums = [int(bid.split('-')[1].split('_')[0]) for bid in batch_ids if bid.startswith("create-")]
         return max(nums, default=0) + 1
 
-    def _get_max_create_num(self, fqn):
+    def _get_max_create_num(self, fqn: str) -> int:
         df = self.spark.sql(f"SELECT batch_id FROM {self.log_table} WHERE fqn = '{fqn}' AND change_category = 'create'")
         batch_ids = [row['batch_id'] for row in df.collect()]
         nums = [int(bid.split('-')[1].split('_')[0]) for bid in batch_ids if bid.startswith("create-")]
         return max(nums, default=0)
 
-    def _get_next_update_num(self, fqn, create_num):
+    def _get_next_update_num(self, fqn: str, create_num: int) -> int:
         prefix = f"{create_num}_update-"
         df = self.spark.sql(f"SELECT batch_id FROM {self.log_table} WHERE fqn = '{fqn}' AND change_category = 'update'")
         batch_ids = [row['batch_id'] for row in df.collect() if prefix in row['batch_id']]
         nums = [int(bid.split('_update-')[1].split('_')[0]) for bid in batch_ids if '_update-' in bid]
         return max(nums, default=0) + 1
 
-    def log_changes(self, diff, cfg, fqn, env, run_id):
+    def log_changes(
+        self,
+        diff: Dict[str, Any],
+        cfg: Dict[str, Any],
+        fqn: str,
+        env: str,
+        run_id: Optional[str] = None,
+        before_snapshot: Optional[Any] = None,
+        after_snapshot: Optional[Any] = None,
+    ) -> None:
         if not self._table_exists():
             self._create_table()
 
-        log_rows = []
+        log_rows: List[Row] = []
+
         # CREATE EVENT
         if diff.get("table_created"):
             create_num = self._get_next_create_num(fqn)
             batch_id = f"create-{create_num}_{fqn}"
             full_snapshot = {fqn: cfg}
-            before_array = [full_snapshot]
+            before_array = [full_snapshot] if before_snapshot is None else [before_snapshot]
             log_rows.append(self._row(
                 batch_id=batch_id,
                 run_id=run_id,
@@ -269,40 +292,20 @@ class TableAuditLogger:
             update_num = self._get_next_update_num(fqn, create_num)
             batch_id = f"{create_num}_update-{update_num}_{fqn}"
 
-            # Super-DRY unified loop
-            for diff_key, event in self.EVENT_MAP.items():
-                items = diff.get(diff_key, [])
-                for item in items:
-                    base = dict(
-                        batch_id=batch_id,
-                        run_id=run_id,
-                        env=env,
-                        yaml_path=self.ddl_yaml_path,
-                        fqn=fqn,
-                        change_category="update",
-                        change_type=event["change_type"],
-                        subject_type=event["subject_type"],
-                        subject_name=event["subject_name"](item, cfg),
-                        before_value=event["before_value"](item),
-                        after_value=event["after_value"](item),
-                    )
-                    # Extra fields can be static dict or lambda
-                    extra = event.get("extra_fields", {})
-                    if callable(extra):
-                        base.update(extra(item))
-                    elif isinstance(extra, dict):
-                        base.update(extra)
-                    log_rows.append(self._row(**base))
-
-            # Table comment change (special, single tuple)
-            if diff.get("table_comment_change"):
-                old, new = diff["table_comment_change"]
-                log_rows.append(self._row(
-                    batch_id=batch_id, run_id=run_id, env=env, yaml_path=self.ddl_yaml_path, fqn=fqn,
-                    change_category="update", change_type="update_comment",
-                    subject_type="table_description", subject_name=cfg["table"],
-                    before_value=old, after_value=new
-                ))
+            # Only one row for UPDATE with before/after
+            log_rows.append(self._row(
+                batch_id=batch_id,
+                run_id=run_id,
+                env=env,
+                yaml_path=self.ddl_yaml_path,
+                fqn=fqn,
+                change_category="update",
+                change_type="update_table",
+                subject_type="table_description",
+                subject_name=cfg["table"],
+                before_value=before_snapshot,
+                after_value=after_snapshot
+            ))
 
         if log_rows:
             df = self.spark.createDataFrame(log_rows)
