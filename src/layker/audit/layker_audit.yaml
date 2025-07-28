@@ -24,7 +24,7 @@ owner: levi.gagne@claconnect.com
 
 properties:
   comment: |
-    **Table:** dq_dev.monitoring.load_table_log
+    **Table:** dq_dev.monitoring.layker_audit
 
     **Purpose:**  
     Audit log of all schema, table, and column changes performed by automated DDL workflows and ops.  
@@ -47,106 +47,53 @@ columns:
     datatype: string
     nullable: false
     comment: "Unique identifier for this change event (UUID or similar, required)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
   2:
-    name: batch_id
-    datatype: string
-    nullable: true
-    comment: "Identifier grouping all changes from a single table update or create operation."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
-    active: true
-
-  3:
     name: run_id
     datatype: string
     nullable: true
     comment: "Databricks job run ID if available (nullable if run from notebook or manual)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  4:
+  3:
     name: env
     datatype: string
     nullable: false
     comment: "Environment/catalog prefix."
-    tags: {}
-    column_masking_rule: ""
-    default_value: dev
-    variable_value: null
     allowed_values: [prd, dev, test, qa]
-    column_check_constraints: {}
     active: true
 
-  5:
+  4:
     name: yaml_path
     datatype: string
     nullable: true
     comment: "Path to the YAML config that triggered the change."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  6:
+  5:
     name: fqn
     datatype: string
     nullable: false
     comment: "Fully qualified table name (catalog.schema.table)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  7:
+  6:
     name: change_category
     datatype: string
     nullable: false
     comment: "Change category: create, update, delete, noop."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
     allowed_values: [create, update, delete, noop]
-    column_check_constraints: {}
     active: true
 
-  8:
+  7:
     name: change_type
     datatype: string
     nullable: false
     comment: "Fine grained type (e.g. add_column, drop_column, add_constraint, etc)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  9:
+  8:
     name: subject_type
     datatype: string
     nullable: false
@@ -156,169 +103,92 @@ columns:
         foreign_key, primary_key, partitioned_by, unique_key, column_name, column_datatype,  
         column_tag, column_comment, column_check_constraint, column_nullable, column_active_status,  
         column_masking_rule, column_default_value, column_variable_value.
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
     allowed_values:
       [table_description, table_tag, table_property, table_check_constraint, row_filter, foreign_key, primary_key, partitioned_by, unique_key, column_name, column_datatype, column_tag, column_comment, column_check_constraint, column_nullable, column_active_status, column_masking_rule, column_default_value, column_variable_value]
-    column_check_constraints: {}
     active: true
 
-  10:
+  9:
     name: subject_name
     datatype: string
     nullable: false
     comment: |
       For columns: position number as string (e.g. "3")  
       For table level: the literal name (e.g. "constraint_1", "fk_events_date", "row_filter_1").
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  11:
+  10:
     name: tag_key
     datatype: string
     nullable: true
     comment: "For tag changes: the tag key (nullable for non tag events)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  12:
+  11:
     name: tag_value
     datatype: string
     nullable: true
     comment: "For tag changes: the tag value (nullable for non tag events)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  13:
+  12:
     name: property_key
     datatype: string
     nullable: true
     comment: "For property changes: the property key (nullable for non property events)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  14:
+  13:
     name: property_value
     datatype: string
     nullable: true
     comment: "For property changes: the property value (nullable for non property events)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  15:
+  14:
     name: before_value
     datatype: string
     nullable: true
     comment: "Value before the change (for create events: can be array or dict serialized as string)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  16:
+  15:
     name: after_value
     datatype: string
     nullable: true
     comment: "Value after the change (for create events: can be array or dict serialized as string)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  17:
+  16:
     name: notes
     datatype: string
     nullable: true
     comment: "Freeform notes, error info, or details about the change (nullable)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  18:
+  17:
     name: created_at
     datatype: timestamp
     nullable: false
     comment: "When this log row was created (UTC, required)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  19:
+  18:
     name: created_by
     datatype: string
     nullable: false
     comment: "Who created this log row (user or service principal, required)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  20:
+  19:
     name: updated_at
     datatype: timestamp
     nullable: true
     comment: "When this log row was last updated (nullable if never updated)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
 
-  21:
+  20:
     name: updated_by
     datatype: string
     nullable: true
     comment: "Who last updated this log row (nullable if never updated)."
-    tags: {}
-    column_masking_rule: ""
-    default_value: null
-    variable_value: null
-    allowed_values: []
-    column_check_constraints: {}
     active: true
