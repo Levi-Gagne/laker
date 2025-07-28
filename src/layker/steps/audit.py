@@ -14,15 +14,31 @@ from layker.yaml import TableSchemaConfig
 
 DEFAULT_AUDIT_TABLE_YAML_PATH = "src/layker/audit/layker_audit.yaml"
 
-def ensure_audit_table_exists(spark: Any, env: str, audit_table_yaml: Optional[str] = None) -> str:
+def resolve_audit_yaml_path(audit_table_yaml: Any) -> str:
+    """
+    Determines which YAML path to use for the audit table.
+    - True => use default
+    - str  => use provided path
+    - False => should never be passed here (skip logging in main)
+    - None  => error (should be validated earlier)
+    """
+    if audit_table_yaml is True:
+        return DEFAULT_AUDIT_TABLE_YAML_PATH
+    elif isinstance(audit_table_yaml, str):
+        return audit_table_yaml
+    else:
+        raise ValueError("Audit table YAML path must be True (for default) or a string path. None or False is invalid in this context.")
+
+def resolve_audit_fully_qualified(audit_yaml_path: str, env: str) -> str:
+    return TableSchemaConfig(audit_yaml_path, env=env).full_table_name
+
+def ensure_audit_table_exists(spark: Any, env: str, audit_table_yaml: Any) -> str:
     """
     Ensures the audit table exists, creating it if necessary.
     Returns the fully qualified name of the audit table.
     """
-    audit_yaml_path = (
-        DEFAULT_AUDIT_TABLE_YAML_PATH if audit_table_yaml is True or audit_table_yaml is None else audit_table_yaml
-    )
-    audit_fq = TableSchemaConfig(audit_yaml_path, env=env).full_table_name
+    audit_yaml_path = resolve_audit_yaml_path(audit_table_yaml)
+    audit_fq = resolve_audit_fully_qualified(audit_yaml_path, env)
     if not table_exists(spark, audit_fq):
         print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
         ddl_cfg, cfg, _ = validate_and_sanitize_yaml(audit_yaml_path, env=env)
@@ -68,17 +84,14 @@ def audit_log_flow(
     target_table_fq: str,
     diff: Dict[str, Any],
     cfg: Dict[str, Any],
-    audit_table_yaml: Optional[str] = None,
+    audit_table_yaml: Any,
 ) -> None:
     """
     Handles full audit log workflow: ensures audit table, refreshes, takes after snapshot, logs event.
     """
-    audit_yaml_path = (
-        DEFAULT_AUDIT_TABLE_YAML_PATH if audit_table_yaml is True or audit_table_yaml is None else audit_table_yaml
-    )
-    audit_fq = ensure_audit_table_exists(spark, env, audit_table_yaml=audit_table_yaml)
+    audit_yaml_path = resolve_audit_yaml_path(audit_table_yaml)
+    audit_fq = ensure_audit_table_exists(spark, env, audit_table_yaml)
 
-    # Refresh the target table before snapshot
     refresh_table(spark, target_table_fq)
     after_snapshot = get_after_audit_snapshot(spark, target_table_fq)
 
