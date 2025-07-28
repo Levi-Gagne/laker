@@ -10,10 +10,21 @@ def table_exists(
     Returns True if the table exists in the Spark catalog, else False.
     """
     try:
-        exists = spark.catalog.tableExists(fully_qualified_table)
+        exists: bool = spark.catalog.tableExists(fully_qualified_table)
         return bool(exists)
     except Exception as e:
-        # Could log the error here, or raise if you want strict failure
-        # For CLI/dev: print, for prod: raise or use logging
         print(f"[ERROR] Exception in table_exists({fully_qualified_table}): {e}")
         return False
+
+def refresh_table(
+    spark: SparkSession,
+    fully_qualified_table: str
+) -> None:
+    """
+    Refresh the table metadata in the Spark catalog.
+    """
+    try:
+        spark.catalog.refreshTable(fully_qualified_table)
+        print(f"[REFRESH] Table {fully_qualified_table} refreshed.")
+    except Exception as e:
+        print(f"[REFRESH][ERROR] Could not refresh table {fully_qualified_table}: {e}")
