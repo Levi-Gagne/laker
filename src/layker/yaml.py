@@ -1,5 +1,3 @@
-# src/layker/yaml.py
-
 import yaml
 from typing import Any, Dict, List, Optional, Union
 from pyspark.sql.types import (
@@ -50,7 +48,6 @@ class TableSchemaConfig:
         except (FileNotFoundError, yaml.YAMLError) as e:
             raise ValueError(f"Error loading YAML configuration from {self.config_path}: {e}")
 
-    # ----- Table-level metadata -----
     @property
     def catalog(self) -> str:
         return self._config.get("catalog", "")
@@ -69,7 +66,6 @@ class TableSchemaConfig:
 
     @property
     def full_table_name(self) -> str:
-        """Returns catalog.schema.table, with env interpolated if catalog ends with _."""
         cat = self.catalog.strip()
         sch = self.schema.strip()
         tbl = self.table.strip()
@@ -100,7 +96,6 @@ class TableSchemaConfig:
     def table_properties(self) -> Dict[str, Any]:
         return self.properties.get("table_properties", {})
 
-    # ----- Keys, constraints, partitioning -----
     @property
     def primary_key(self) -> List[str]:
         pk = self._config.get("primary_key", [])
@@ -136,11 +131,9 @@ class TableSchemaConfig:
     def get_row_filter(self, key: str) -> Optional[Dict[str, Any]]:
         return self.row_filters.get(key)
 
-    # ----- Columns -----
     @property
     def columns(self) -> List[Dict[str, Any]]:
         cols_dict = self._config.get("columns", {})
-        # Columns indexed as {1: {...}, 2: {...}}, sort by int for canonical order
         cols_dict_str = {str(k): v for k, v in cols_dict.items()}
         sorted_keys = sorted(map(int, cols_dict_str.keys()))
         return [cols_dict_str[str(k)] for k in sorted_keys]
@@ -156,7 +149,6 @@ class TableSchemaConfig:
     def get_column(self, col_name: str) -> Optional[Dict[str, Any]]:
         return self.column_by_name.get(col_name)
 
-    # ---- Column values, variable values, allowed values ----
     @property
     def column_default_values(self) -> Dict[str, Any]:
         return {col["name"]: col.get("default_value", None) for col in self.columns}
@@ -173,7 +165,6 @@ class TableSchemaConfig:
         col = self.get_column(col_name)
         return col.get("allowed_values", []) if col else []
 
-    # ---- Column constraints (by column or all) ----
     def get_column_check_constraints(self, col_name: str, key: Optional[str] = None) -> Union[Dict[str, Any], Optional[Dict[str, Any]]]:
         col = self.get_column(col_name)
         ccs = col.get("column_check_constraints", {}) if col else {}
@@ -181,7 +172,6 @@ class TableSchemaConfig:
             return ccs.get(key)
         return ccs
 
-    # ---- Spark schema utilities ----
     @property
     def spark_struct_fields(self) -> List[StructField]:
         fields = []
@@ -203,7 +193,6 @@ class TableSchemaConfig:
     def spark_schema(self) -> StructType:
         return StructType(self.spark_struct_fields)
 
-    # ---- Utility/describe ----
     def describe(self) -> None:
         print(f"Table: {self.full_table_name}")
         print(f"  Owner: {self.owner}")
@@ -227,8 +216,3 @@ class TableSchemaConfig:
             ccc = col.get("column_check_constraints", {})
             if ccc:
                 print(f"      Column Check Constraints: {ccc}")
-
-# Example usage:
-# config = TableSchemaConfig("path/to/table_ddl.yaml", env="prod")
-# config.describe()
-# df = spark.createDataFrame([], config.spark_schema)
