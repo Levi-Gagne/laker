@@ -1,5 +1,3 @@
-# src/layker/steps/validate.py
-
 import sys
 import yaml
 from typing import Tuple, Optional, Dict, Any
@@ -13,7 +11,6 @@ from layker.utils.printer import print_error, print_success
 def validate_and_sanitize_yaml(
     yaml_path: str,
     env: Optional[str] = None,
-    mode: str = "apply"
 ) -> Tuple[TableSchemaConfig, Dict[str, Any], str]:
     """
     Validate and sanitize the YAML config file.
@@ -21,14 +18,12 @@ def validate_and_sanitize_yaml(
     Args:
         yaml_path: Path to the YAML file.
         env: Optional environment override.
-        mode: Workflow mode ('apply', 'validate', etc.)
 
     Returns:
         Tuple of (TableSchemaConfig, sanitized_cfg_dict, fully_qualified_table_name)
-        Exits process on failure or if mode == 'validate'.
 
     Exits:
-        sys.exit() with error message on any failure or if validation-only mode.
+        sys.exit() with error message on any failure.
     """
     try:
         ddl_cfg = TableSchemaConfig(yaml_path, env=env)
@@ -63,9 +58,5 @@ def validate_and_sanitize_yaml(
         sys.exit(1)
     print_success("YAML validation passed.")
 
-    if mode == "validate":
-        print(f"{Color.b}{Color.ivory}Mode 'validate': validation complete. No further action taken.{Color.r}")
-        sys.exit(0)
-    # Add the fully qualified table name to the return
     fq = ddl_cfg.full_table_name
     return ddl_cfg, cfg, fq
