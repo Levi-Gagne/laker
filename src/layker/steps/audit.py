@@ -2,7 +2,7 @@
 
 import os
 import getpass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from layker.utils.table import table_exists, refresh_table
 from layker.steps.loader import apply_loader_step
@@ -14,45 +14,52 @@ from layker.yaml import TableSchemaConfig
 
 AUDIT_TABLE_YAML_PATH = "src/layker/audit/layker_audit.yaml"
 
-def get_before_audit_snapshot(
-    spark: Any,
-    env: str,
-    target_table_fq: str,
-) -> Tuple[Optional[Dict[str, Any]], str]:
+def ensure_audit_table_exists(spark: Any, env: str) -> str:
     """
-    Ensures the audit log table exists (creating if needed), then returns the current
-    sanitized snapshot of the target table AND the audit table FQ name.
+    Ensures the audit table exists, creating it if necessary.
+    Returns the fully qualified name of the audit table.
     """
     if not table_exists(spark, audit_fq := TableSchemaConfig(AUDIT_TABLE_YAML_PATH, env=env).full_table_name):
-        print(f"[AUDIT] Audit table {audit_fq} not found; starting validation...")
+        print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
         ddl_cfg, cfg, _ = validate_and_sanitize_yaml(AUDIT_TABLE_YAML_PATH, env=env)
         apply_loader_step(cfg, spark, dry_run=False, action_desc="Audit table create")
-        # After creation, move on—don't need a before snapshot of the audit table itself
+    return audit_fq
 
-    # Get snapshot of the *target* table we're auditing
+def get_before_audit_snapshot(
+    spark: Any,
+    target_table_fq: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Returns the current sanitized snapshot for before/after audit logging.
+    """
     try:
         introspector = TableIntrospector(spark)
         raw_snap = introspector.snapshot(target_table_fq)
         before = sanitize_snapshot(raw_snap)
-        return before, audit_fq
+        return before
     except Exception as e:
         print(f"[AUDIT][ERROR] Could not get before snapshot for {target_table_fq}: {e}")
-        return None, audit_fq
+        return None
 
 def log_after_audit(
     spark: Any,
     env: str,
-    audit_fq: str,
-    before_snapshot: Optional[Dict[str, Any]],
+    before_snapshot: Dict[str, Any],
     target_table_fq: str,
     diff: Dict[str, Any],
     cfg: Dict[str, Any],
 ) -> None:
     """
-    Refreshes the target table, grabs the after snapshot, and logs the audit row.
+    Ensures the audit table exists, refreshes the target table, grabs after snapshot,
+    and logs the audit row.
     """
+    # Ensure audit table exists (may create if missing)
+    audit_fq = ensure_audit_table_exists(spark, env)
+
+    # Refresh the target table
     refresh_table(spark, target_table_fq)
 
+    # Get after snapshot
     try:
         introspector = TableIntrospector(spark)
         raw_snap = introspector.snapshot(target_table_fq)
