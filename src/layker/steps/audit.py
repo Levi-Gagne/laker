@@ -1,4 +1,4 @@
-# src/layker/steps/audit.py
+# src/layker/steps/auditpy
 
 import os
 import getpass
@@ -9,108 +9,75 @@ from layker.steps.loader import apply_loader_step
 from layker.audit.logger import TableAuditLogger
 from layker.steps.validate import validate_and_sanitize_yaml
 from layker.introspector import TableIntrospector
-from layker.sanitizer import sanitize_snapshot
 from layker.yaml import TableSchemaConfig
 
 DEFAULT_AUDIT_TABLE_YAML_PATH = "src/layker/audit/layker_audit.yaml"
 
 def resolve_audit_yaml_path(audit_table_yaml: Any) -> str:
-    """
-    Determines which YAML path to use for the audit table.
-    - True => use default
-    - str  => use provided path
-    - False => should never be passed here (skip logging in main)
-    - None  => error (should be validated earlier)
-    """
     if audit_table_yaml is True:
         return DEFAULT_AUDIT_TABLE_YAML_PATH
     elif isinstance(audit_table_yaml, str):
         return audit_table_yaml
     else:
-        raise ValueError("Audit table YAML path must be True (for default) or a string path. None or False is invalid in this context.")
+        raise ValueError("Audit table YAML path must be True (default) or a string path.")
 
-def resolve_audit_fully_qualified(audit_yaml_path: str, env: str) -> str:
-    return TableSchemaConfig(audit_yaml_path, env=env).full_table_name
-
-def ensure_audit_table_exists(spark: Any, env: str, audit_table_yaml: Any) -> str:
-    """
-    Ensures the audit table exists, creating it if necessary.
-    Returns the fully qualified name of the audit table.
-    """
-    audit_yaml_path = resolve_audit_yaml_path(audit_table_yaml)
-    audit_fq = resolve_audit_fully_qualified(audit_yaml_path, env)
-    if not table_exists(spark, audit_fq):
+def ensure_audit_table_exists(spark, env, audit_table_yaml_path) -> str:
+    if not table_exists(spark, audit_fq := TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name):
         print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
-        ddl_cfg, cfg, _ = validate_and_sanitize_yaml(audit_yaml_path, env=env)
+        ddl_cfg, cfg, _ = validate_and_sanitize_yaml(audit_table_yaml_path, env=env)
         apply_loader_step(cfg, spark, dry_run=False, action_desc="Audit table create")
     return audit_fq
 
-def get_before_audit_snapshot(
-    spark: Any,
-    target_table_fq: str
-) -> Optional[Dict[str, Any]]:
-    """
-    Returns the current sanitized snapshot for before/after audit logging.
-    """
+def get_table_snapshot(spark, fq_table: str) -> Optional[Dict[str, Any]]:
     try:
         introspector = TableIntrospector(spark)
-        raw_snap = introspector.snapshot(target_table_fq)
-        before = sanitize_snapshot(raw_snap)
-        return before
+        return introspector.snapshot(fq_table)
     except Exception as e:
-        print(f"[AUDIT][ERROR] Could not get before snapshot for {target_table_fq}: {e}")
+        print(f"[AUDIT][ERROR] Could not get snapshot for {fq_table}: {e}")
         return None
 
-def get_after_audit_snapshot(
+def before_audit_log_flow(
     spark: Any,
-    target_table_fq: str
+    env: str,
+    target_table_fq: str,
+    audit_table_yaml_path: str,
 ) -> Optional[Dict[str, Any]]:
     """
-    Returns the current sanitized snapshot for after audit logging.
+    Ensures audit table exists, then gets BEFORE snapshot of the target table.
     """
-    try:
-        introspector = TableIntrospector(spark)
-        raw_snap = introspector.snapshot(target_table_fq)
-        after = sanitize_snapshot(raw_snap)
-        return after
-    except Exception as e:
-        print(f"[AUDIT][ERROR] Could not get after snapshot for {target_table_fq}: {e}")
-        return None
+    ensure_audit_table_exists(spark, env, audit_table_yaml_path)
+    before_snapshot = get_table_snapshot(spark, target_table_fq)
+    return before_snapshot
 
-def audit_log_flow(
+def after_audit_log_flow(
     spark: Any,
     env: str,
     before_snapshot: Optional[Dict[str, Any]],
     target_table_fq: str,
-    diff: Dict[str, Any],
-    cfg: Dict[str, Any],
-    audit_table_yaml: Any,
+    yaml_path: str,
+    audit_table_yaml_path: str,
+    notes: Optional[str] = None,
 ) -> None:
     """
-    Handles full audit log workflow: ensures audit table, refreshes, takes after snapshot, logs event.
+    Refreshes target table, gets after snapshot, and writes audit log row.
     """
-    audit_yaml_path = resolve_audit_yaml_path(audit_table_yaml)
-    audit_fq = ensure_audit_table_exists(spark, env, audit_table_yaml)
-
     refresh_table(spark, target_table_fq)
-    after_snapshot = get_after_audit_snapshot(spark, target_table_fq)
-
+    after_snapshot = get_table_snapshot(spark, target_table_fq)
+    audit_fq = TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name
     admin_user = os.environ.get("USER") or getpass.getuser() or "AdminUser"
     logger = TableAuditLogger(
         spark=spark,
-        ddl_yaml_path=audit_yaml_path,
         log_table=audit_fq,
         actor=admin_user,
     )
-
-    try:
-        logger.log_changes(
-            diff=diff,
-            cfg=cfg,
-            env=env,
-            before_snapshot=before_snapshot,
-            after_snapshot=after_snapshot
-        )
-        print(f"[AUDIT] Event logged to {audit_fq}")
-    except Exception as e:
-        print(f"[AUDIT][ERROR] Could not log to {audit_fq}: {e}")
+    logger.log_change(
+        run_id=None,
+        env=env,
+        yaml_path=yaml_path,
+        fqn=target_table_fq,
+        before_value=before_snapshot,
+        after_value=after_snapshot,
+        subject_name=target_table_fq.split('.')[-1],
+        notes=notes,
+    )
+    print(f"[AUDIT] Event logged to {audit_fq}")
