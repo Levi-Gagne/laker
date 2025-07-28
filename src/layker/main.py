@@ -9,7 +9,6 @@ from pyspark.sql import SparkSession
 from layker.steps.validate import validate_and_sanitize_yaml
 from layker.steps.loader import apply_loader_step
 from layker.steps.audit import get_before_audit_snapshot, log_after_audit
-
 from layker.steps.differences import compute_and_validate_diff_controller
 
 # --- Validators ---
@@ -26,6 +25,8 @@ from layker.utils.printer import (
     print_error,
 )
 
+DEFAULT_AUDIT_TABLE_YAML_PATH = "src/layker/audit/layker_audit.yaml"
+
 def run_table_load(
     yaml_path: str,
     log_ddl: Optional[str] = None,
@@ -33,14 +34,14 @@ def run_table_load(
     spark: Optional[SparkSession] = None,
     env: Optional[str] = None,
     mode: str = "apply",
-    audit_table_yaml_path: Optional[str] = None,
+    audit_table_yaml: Optional[bool or str] = True,  # True = default path, str = custom, False/None = disable
 ) -> None:
     try:
         if spark is None:
             spark = get_or_create_spark_session()
 
-        mode, env, audit_table_yaml_path = validate_params(
-            yaml_path, log_ddl, mode, env, audit_table_yaml_path, spark
+        mode, env, _ = validate_params(
+            yaml_path, log_ddl, mode, env, None, spark
         )
 
         print(section_header("STEP 1/4: VALIDATING YAML"))
@@ -56,17 +57,26 @@ def run_table_load(
                 print_warning(f"[DIFF] No table to compare; would create table {fq}.")
                 return
             elif mode in ("apply", "all"):
-                before_snapshot = get_before_audit_snapshot(spark, fq)
-                apply_loader_step(cfg, spark, dry_run, fq, action_desc="Full create")
-                if audit_table_yaml_path and not dry_run:
-                    log_after_audit(
-                        spark,
-                        env,
-                        before_snapshot=before_snapshot,
-                        target_table_fq=fq,
-                        diff={"table_created": True},
-                        cfg=cfg,
-                    )
+                if not dry_run:
+                    before_snapshot = get_before_audit_snapshot(spark, fq)
+                    apply_loader_step(cfg, spark, dry_run, fq, action_desc="Full create")
+                    # -- AUDIT LOGGING --
+                    if audit_table_yaml is not False and audit_table_yaml is not None:
+                        if audit_table_yaml is True:
+                            audit_table_yaml_path = DEFAULT_AUDIT_TABLE_YAML_PATH
+                        else:
+                            audit_table_yaml_path = audit_table_yaml
+                        log_after_audit(
+                            spark,
+                            env,
+                            before_snapshot=before_snapshot,
+                            target_table_fq=fq,
+                            diff={"table_created": True},
+                            cfg=cfg,
+                            audit_table_yaml_path=audit_table_yaml_path,
+                        )
+                else:
+                    print_success("[DRY RUN] Would create table and log audit event (skipped).")
                 return
             print_error("Unreachable: Table does not exist and mode is not 'diff', 'apply', or 'all'. Exiting.")
             sys.exit(1)
@@ -81,19 +91,28 @@ def run_table_load(
                 log_ddl=log_ddl,
             )
 
-            if mode in ("apply", "all") and not dry_run:
-                print(section_header("APPLYING METADATA CHANGES", color=Color.green))
-                before_snapshot = get_before_audit_snapshot(spark, fq)
-                apply_loader_step(cfg, spark, dry_run, fq, action_desc="Updates applied")
-                if audit_table_yaml_path:
-                    log_after_audit(
-                        spark,
-                        env,
-                        before_snapshot=before_snapshot,
-                        target_table_fq=fq,
-                        diff=diff,
-                        cfg=cfg,
-                    )
+            if mode in ("apply", "all"):
+                if not dry_run:
+                    print(section_header("APPLYING METADATA CHANGES", color=Color.green))
+                    before_snapshot = get_before_audit_snapshot(spark, fq)
+                    apply_loader_step(cfg, spark, dry_run, fq, action_desc="Updates applied")
+                    # -- AUDIT LOGGING --
+                    if audit_table_yaml is not False and audit_table_yaml is not None:
+                        if audit_table_yaml is True:
+                            audit_table_yaml_path = DEFAULT_AUDIT_TABLE_YAML_PATH
+                        else:
+                            audit_table_yaml_path = audit_table_yaml
+                        log_after_audit(
+                            spark,
+                            env,
+                            before_snapshot=before_snapshot,
+                            target_table_fq=fq,
+                            diff=diff,
+                            cfg=cfg,
+                            audit_table_yaml_path=audit_table_yaml_path,
+                        )
+                else:
+                    print_success("[DRY RUN] Would apply updates and log audit event (skipped).")
 
     except SystemExit:
         raise
@@ -108,15 +127,15 @@ def run_table_load(
 
 def cli_entry():
     if len(sys.argv) < 2:
-        print_error("Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit_table_yaml_path]")
+        print_error("Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit_table_yaml]")
         sys.exit(1)
     yaml_path = sys.argv[1]
     env      = sys.argv[2] if len(sys.argv) > 2 else None
     dry_run  = (len(sys.argv) > 3 and sys.argv[3].lower() == "true")
     mode     = sys.argv[4] if len(sys.argv) > 4 else "apply"
-    audit_table_yaml_path = sys.argv[5] if len(sys.argv) > 5 else None
+    audit_table_yaml = sys.argv[5] if len(sys.argv) > 5 else True
     run_table_load(
-        yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit_table_yaml_path=audit_table_yaml_path
+        yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit_table_yaml=audit_table_yaml
     )
 
 if __name__ == "__main__":
