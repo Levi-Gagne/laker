@@ -1,6 +1,6 @@
 # src/layker/utils/printer.py
 
-from laker.utils.color import Color
+from layker.utils.color import Color
 
 def section_header(title: str, color: str = Color.aqua_blue) -> str:
     bar = f"{color}{Color.b}" + "═" * 62 + Color.r

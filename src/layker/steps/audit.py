@@ -1,4 +1,4 @@
-# src/layker/steps/auditpy
+# src/layker/steps/audit.py
 
 import os
 import getpass
@@ -13,16 +13,17 @@ from layker.yaml import TableSchemaConfig
 
 DEFAULT_AUDIT_TABLE_YAML_PATH = "src/layker/audit/layker_audit.yaml"
 
-def resolve_audit_yaml_path(audit_table_yaml: Any) -> str:
-    if audit_table_yaml is True:
+def resolve_audit_yaml_path(audit_log_table: Any) -> str:
+    if audit_log_table is True:
         return DEFAULT_AUDIT_TABLE_YAML_PATH
-    elif isinstance(audit_table_yaml, str):
-        return audit_table_yaml
+    elif isinstance(audit_log_table, str):
+        return audit_log_table
     else:
         raise ValueError("Audit table YAML path must be True (default) or a string path.")
 
 def ensure_audit_table_exists(spark, env, audit_table_yaml_path) -> str:
-    if not table_exists(spark, audit_fq := TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name):
+    audit_fq = TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name
+    if not table_exists(spark, audit_fq):
         print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
         ddl_cfg, cfg, _ = validate_and_sanitize_yaml(audit_table_yaml_path, env=env)
         apply_loader_step(cfg, spark, dry_run=False, action_desc="Audit table create")
@@ -56,6 +57,7 @@ def after_audit_log_flow(
     target_table_fq: str,
     yaml_path: str,
     audit_table_yaml_path: str,
+    run_id: Optional[str] = None,
     notes: Optional[str] = None,
 ) -> None:
     """
@@ -71,7 +73,7 @@ def after_audit_log_flow(
         actor=admin_user,
     )
     logger.log_change(
-        run_id=None,
+        run_id=run_id,
         env=env,
         yaml_path=yaml_path,
         fqn=target_table_fq,

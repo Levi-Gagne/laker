@@ -205,7 +205,7 @@ columns:
     active: true
 
 
-# --------- Table snapshot: dq_dev.lmg_sandbox.config_driven_table_example ---------
+# --------- RAW introspector snapshot: dq_dev.lmg_sandbox.config_driven_table_example ---------
 
 columns:
 - - example_id
@@ -234,8 +234,88 @@ columns:
   - timestamp
 - - updated_by
   - string
+comments:
+  example_id: 'Primary key: unique row id for this table.'
+  minimal_col: ''
+  column_1: ''
+  column_2: Integer value for sample calculations.
+  column_3: Numeric column for analytic tests.
+  event_date: Event date for partitioning.
+  email: User email address. Unique constraint applied.
+  user_id: Alternate user id for composite unique constraint.
+  group_id: Group id for composite unique constraint.
+  created_at: Timestamp when row was created.
+  created_by: System or user that created this row.
+  updated_at: Timestamp for the most recent update to this row.
+  updated_by: System or user that last updated this row.
+  Catalog: ''
+  Database: ''
+  Table: ''
+  Created Time: ''
+  Last Access: ''
+  Created By: ''
+  Type: ''
+  Comment: ''
+  Location: ''
+  Provider: ''
+  Owner: ''
+  Is_managed_location: ''
+  Predictive Optimization: ''
+  Table Properties: ''
+  config_driven_table_example_pk: ''
+col_tags: {}
+tbl_tags: {}
+tbl_props:
+  deletedfileretentionduration: 720h
+  delta.columnmapping.maxcolumnid: '13'
+  delta.columnmapping.mode: name
+  delta.constraints.constraint_1: event_date <= current_date ( )
+  delta.enabledeletionvectors: 'true'
+  delta.feature.appendonly: supported
+  delta.feature.changedatafeed: supported
+  delta.feature.checkconstraints: supported
+  delta.feature.columnmapping: supported
+  delta.feature.deletionvectors: supported
+  delta.feature.generatedcolumns: supported
+  delta.feature.invariants: supported
+  delta.minreaderversion: '3'
+  delta.minwriterversion: '7'
+tbl_comment: ''
+tbl_constraints:
+  '1':
+    expression: event_date <= current_date ( )
+column_check_constraints: {}
+
+
+# --------- CLEANED snapshot: dq_dev.lmg_sandbox.config_driven_table_example ---------
+
+columns:
+- - example_id
+  - string
+- - minimal_col
+  - string
+- - column_1
+  - string
+- - column_2
+  - int
+- - column_3
+  - double
 - - event_date
   - date
+- - email
+  - string
+- - user_id
+  - string
+- - group_id
+  - string
+- - created_at
+  - timestamp
+- - created_by
+  - string
+- - updated_at
+  - timestamp
+- - updated_by
+  - string
 comments:
   example_id: 'Primary key: unique row id for this table.'
   minimal_col: ''
@@ -344,17 +424,61 @@ col_col_constraints:
   updated_by: {}
 
 # Table-level CHECK constraints:
+'1':
+  expression: event_date <= current_date ( )
 
 # YAML Row Filters:
-
-# Column-level CHECK constraints:
+row_filter_1:
+  name: rls_internal_only
+  expression: classification = `internal`
 
 # Column Masking Rules:
+example_id: ''
+minimal_col: ''
+column_1: ''
+column_2: ''
+column_3: ''
+event_date: ''
+email: ''
+user_id: ''
+group_id: ''
+created_at: ''
+created_by: ''
+updated_at: ''
+updated_by: ''
 
 # Column Default Values:
+example_id: ''
+minimal_col: ''
+column_1: ''
+column_2: ''
+column_3: ''
+event_date: ''
+email: ''
+user_id: ''
+group_id: ''
+created_at: ''
+created_by: ''
+updated_at: ''
+updated_by: ''
 
 # Column Variable Values:
+example_id: ''
+minimal_col: ''
+column_1: ''
+column_2: ''
+column_3: ''
+event_date: ''
+email: ''
+user_id: ''
+group_id: ''
+created_at: ''
+created_by: ''
+updated_at: ''
+updated_by: ''
 
 # Primary Key:
+- example_id
 
 # Partitioned By:
+- event_date
