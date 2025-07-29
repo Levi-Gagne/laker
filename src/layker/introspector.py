@@ -1,134 +1,184 @@
-# /src/layker/introspector.py
+# src/layker/table.py
 
-from typing import Any, Dict, List, Tuple
+from typing import List, Dict, Any, Optional
+import re
 from pyspark.sql import SparkSession
+from layker.utils.spark import spark_sql_to_rows
+from layker.utils.helpers import parse_fully_qualified_table_name
 
-class TableIntrospector:
-    """
-    Reads live Delta table metadata from Spark / Unity Catalog.
-    """
+# ===== DESCRIBE TABLE EXTENDED Parsers =====
 
-    def __init__(self, spark: SparkSession):
-        self.spark = spark
+def extract_columns(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    columns = []
+    for row in describe_rows:
+        col_name = (row.get("col_name") or "").strip()
+        data_type = (row.get("data_type") or "").strip()
+        comment = (row.get("comment") or "").strip() if row.get("comment") else None
+        if col_name == "" or col_name.startswith("#"):
+            if col_name == "# Partition Information":
+                break
+            continue
+        columns.append({
+            "name": col_name,
+            "datatype": data_type,
+            "comment": comment if comment and comment.upper() != "NULL" else "",
+        })
+    return columns
 
+def extract_partitioned_by(describe_rows: List[Dict[str, Any]]) -> List[str]:
+    collecting = False
+    partition_cols = []
+    for row in describe_rows:
+        col_name = (row.get("col_name") or "").strip()
+        if col_name == "# Partition Information":
+            collecting = True
+            continue
+        if collecting:
+            if not col_name or col_name.startswith("#"):
+                break
+            if col_name != "# col_name":
+                partition_cols.append(col_name)
+    return partition_cols
 
-    def get_columns_and_types(self, fq: str) -> List[Tuple[str, str]]:
-        rows = self.spark.sql(f"DESCRIBE TABLE {fq}").collect()
-        seen = set()
-        out: List[Tuple[str, str]] = []
-        for r in rows:
-            name, typ = r["col_name"], r["data_type"]
-            if name and not name.startswith("#") and name not in seen:
-                out.append((name, typ))
-                seen.add(name)
-        return out
+def extract_table_details(describe_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    details = {}
+    table_properties = {}
+    in_details = False
+    for row in describe_rows:
+        col_name = (row.get("col_name") or "").strip()
+        data_type = (row.get("data_type") or "").strip()
+        if col_name == "# Detailed Table Information":
+            in_details = True
+            continue
+        if in_details:
+            if not col_name or col_name.startswith("#"):
+                break
+            if col_name == "Catalog":
+                details["catalog"] = data_type
+            elif col_name == "Database":
+                details["schema"] = data_type
+            elif col_name == "Table":
+                details["table"] = data_type
+            elif col_name == "Owner":
+                details["owner"] = data_type
+            elif col_name == "Comment":
+                details["comment"] = data_type
+            elif col_name == "Table Properties":
+                for prop in data_type.strip("[]").split(","):
+                    if "=" in prop:
+                        k, v = prop.split("=", 1)
+                        table_properties[k.strip()] = v.strip()
+    details["table_properties"] = table_properties
+    return details
 
-    def get_column_comments(self, fq: str) -> Dict[str, str]:
-        out: Dict[str, str] = {}
-        rows = self.spark.sql(f"DESCRIBE TABLE EXTENDED {fq}").collect()
-        for r in rows:
-            n, c = r["col_name"], r["comment"]
-            if n and not n.startswith("#"):
-                out[n] = c or ""
-        return out
+def extract_constraints(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    constraints = []
+    in_constraints = False
+    for row in describe_rows:
+        col_name = (row.get("col_name") or "").strip()
+        data_type = (row.get("data_type") or "").strip()
+        if col_name == "# Constraints":
+            in_constraints = True
+            continue
+        if in_constraints:
+            if not col_name or col_name.startswith("#"):
+                break
+            if col_name and data_type:
+                constraints.append({"name": col_name, "type": data_type})
+    return constraints
 
-    def get_column_tags(self, fq: str) -> Dict[str, Dict[str, str]]:
-        tags: Dict[str, Dict[str, str]] = {}
-        try:
-            rows = self.spark.sql(f"SHOW COLUMN TAGS {fq}").collect()
-            for r in rows:
-                col = r["column_name"]
-                tags.setdefault(col, {})[r["key"]] = r["value"]
-        except Exception:
-            pass
-        return tags
+def extract_primary_key(describe_rows: List[Dict[str, Any]]) -> Optional[List[str]]:
+    cons = extract_constraints(describe_rows)
+    for c in cons:
+        if "PRIMARY KEY" in c["type"]:
+            m = re.search(r"\((.*?)\)", c["type"])
+            if m:
+                return [col.strip().replace("`", "") for col in m.group(1).split(",")]
+    return None
 
-    def get_table_tags(self, fq: str) -> Dict[str, str]:
-        out: Dict[str, str] = {}
-        try:
-            rows = self.spark.sql(f"SHOW TABLE TAGS {fq}").collect()
-            for r in rows:
-                out[r["key"]] = r["value"]
-        except Exception:
-            pass
-        return out
+# ===== Info Schema Table Query Functions =====
 
-    def get_table_properties(self, fq: str) -> Dict[str, str]:
+def get_table_tags(spark: SparkSession, fq_table: str) -> Dict[str, str]:
+    try:
+        catalog, schema, table = parse_fully_qualified_table_name(fq_table)
+        sql = f"""
+            SELECT tag_name, tag_value
+            FROM system.information_schema.table_tags
+            WHERE catalog_name = '{catalog}'
+              AND schema_name = '{schema}'
+              AND table_name = '{table}'
         """
-        Grabs only the properties you explicitly set on this table,
-        via SHOW TBLPROPERTIES.
-        """
-        props: Dict[str, str] = {}
-        try:
-            rows = self.spark.sql(f"SHOW TBLPROPERTIES {fq}").collect()
-            for r in rows:
-                props[r["key"].lower()] = r["value"]
-        except Exception:
-            pass
-        return props
+        rows = spark_sql_to_rows(spark, sql)
+        return {row['tag_name']: row['tag_value'] for row in rows}
+    except Exception as e:
+        print(f"[ERROR] get_table_tags failed: {e}")
+        return {}
 
-    def get_table_comment(self, fq: str) -> str:
+def get_column_tags(spark: SparkSession, fq_table: str) -> Dict[str, Dict[str, str]]:
+    try:
+        catalog, schema, table = parse_fully_qualified_table_name(fq_table)
+        sql = f"""
+            SELECT column_name, tag_name, tag_value
+            FROM system.information_schema.column_tags
+            WHERE catalog_name = '{catalog}'
+              AND schema_name = '{schema}'
+              AND table_name = '{table}'
         """
-        Pulls the table-level COMMENT from DESCRIBE EXTENDED.
-        """
-        rows = self.spark.sql(f"DESCRIBE TABLE EXTENDED {fq}").collect()
-        for r in rows:
-            if r["col_name"] and r["col_name"].strip().lower() == "comment":
-                return r["comment"] or ""
-        return ""
+        rows = spark_sql_to_rows(spark, sql)
+        col_tags = {}
+        for row in rows:
+            col = row['column_name']
+            tag = row['tag_name']
+            val = row['tag_value']
+            if col not in col_tags:
+                col_tags[col] = {}
+            col_tags[col][tag] = val
+        return col_tags
+    except Exception as e:
+        print(f"[ERROR] get_column_tags failed: {e}")
+        return {}
 
-    def get_table_check_constraints(self, fq: str) -> Dict[str, Dict[str, str]]:
+def get_row_filters(spark: SparkSession, fq_table: str) -> List[dict]:
+    try:
+        catalog, schema, table = parse_fully_qualified_table_name(fq_table)
+        sql = f"""
+            SELECT filter_name, target_columns
+            FROM system.information_schema.row_filters
+            WHERE table_catalog = '{catalog}'
+              AND table_schema = '{schema}'
+              AND table_name = '{table}'
         """
-        Returns a dict of {constraint_name: {"expression": ...}} for all table-level check constraints,
-        merging native and Delta tblproperties.
-        """
-        constraints: Dict[str, Dict[str, str]] = {}
-        # 1. Native CHECK constraints
-        try:
-            rows = self.spark.sql(f"SHOW TABLE CONSTRAINTS {fq}").collect()
-            for r in rows:
-                if r["constraint_type"] == "CHECK":
-                    constraints[r["name"]] = {"expression": r.get("expression", "")}
-        except Exception:
-            pass
-        # 2. Delta-engine constraints in tblproperties
-        try:
-            rows = self.spark.sql(f"SHOW TBLPROPERTIES {fq}").collect()
-            for r in rows:
-                k, v = r["key"], r["value"]
-                if k.startswith("delta.constraints.constraint_"):
-                    name = k.split("delta.constraints.constraint_")[-1]
-                    constraints[name] = {"expression": v}
-        except Exception:
-            pass
-        return constraints
+        return spark_sql_to_rows(spark, sql)
+    except Exception as e:
+        print(f"[ERROR] get_row_filters failed: {e}")
+        return []
 
-    def get_column_check_constraints(self, fq: str) -> Dict[str, Dict[str, str]]:
+def get_constraint_table_usage(spark: SparkSession, fq_table: str) -> List[dict]:
+    try:
+        catalog, schema, table = parse_fully_qualified_table_name(fq_table)
+        sql = f"""
+            SELECT constraint_name
+            FROM system.information_schema.constraint_table_usage
+            WHERE table_catalog = '{catalog}'
+              AND table_schema = '{schema}'
+              AND table_name = '{table}'
         """
-        Returns a mapping column_name → {constraint_name: expression}.
-        """
-        col_checks: Dict[str, Dict[str, str]] = {}
-        try:
-            rows = self.spark.sql(f"SHOW TABLE CONSTRAINTS {fq}").collect()
-            for r in rows:
-                if r["constraint_type"].upper() == "CHECK":
-                    col = r.get("column_name")
-                    name = r["name"]
-                    expr = r.get("expression", "")
-                    if col:
-                        col_checks.setdefault(col, {})[name] = expr
-        except Exception:
-            pass
-        return col_checks
+        return spark_sql_to_rows(spark, sql)
+    except Exception as e:
+        print(f"[ERROR] get_constraint_table_usage failed: {e}")
+        return []
 
-    def snapshot(self, fq: str) -> Dict[str, Any]:
-        return {
-            "columns":                   self.get_columns_and_types(fq),
-            "comments":                  self.get_column_comments(fq),
-            "col_tags":                  self.get_column_tags(fq),
-            "tbl_tags":                  self.get_table_tags(fq),
-            "tbl_props":                 self.get_table_properties(fq),
-            "tbl_comment":               self.get_table_comment(fq),
-            "tbl_constraints":           self.get_table_check_constraints(fq),
-            "column_check_constraints":  self.get_column_check_constraints(fq),
-        }
+def get_constraint_column_usage(spark: SparkSession, fq_table: str) -> List[dict]:
+    try:
+        catalog, schema, table = parse_fully_qualified_table_name(fq_table)
+        sql = f"""
+            SELECT column_name, constraint_name
+            FROM system.information_schema.constraint_column_usage
+            WHERE table_catalog = '{catalog}'
+              AND table_schema = '{schema}'
+              AND table_name = '{table}'
+        """
+        return spark_sql_to_rows(spark, sql)
+    except Exception as e:
+        print(f"[ERROR] get_constraint_column_usage failed: {e}")
+        return []
