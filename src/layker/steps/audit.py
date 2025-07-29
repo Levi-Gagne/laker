@@ -18,8 +18,10 @@ def resolve_audit_yaml_path(audit_log_table: Any) -> str:
         return DEFAULT_AUDIT_TABLE_YAML_PATH
     elif isinstance(audit_log_table, str):
         return audit_log_table
+    elif audit_log_table is False:
+        return None
     else:
-        raise ValueError("Audit table YAML path must be True (default) or a string path.")
+        raise ValueError("audit_log_table must be True, False, or a string path.")
 
 def ensure_audit_table_exists(spark, env, audit_table_yaml_path) -> str:
     audit_fq = TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name
