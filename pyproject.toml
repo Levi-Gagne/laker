@@ -20,3 +20,10 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/Levi-Gagne/layker"
 Issues = "https://github.com/Levi-Gagne/layker/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# This ensures all files in src/layker/resources/ are included
+"layker.resources" = ["*"]
