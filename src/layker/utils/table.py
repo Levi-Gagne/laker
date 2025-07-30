@@ -1,9 +1,29 @@
 # src/layker/utils/table.py
 
-from typing import Tuple
-from pyspark.sql import SparkSession
+from typing import Tuple, List
+from pyspark.sql import SparkSession, DataFrame
 from layker.utils.color import Color
 
+def table_exists(spark: SparkSession, fully_qualified_table: str) -> bool:
+    """
+    Returns True if the table exists in the Spark catalog, else False.
+    """
+    try:
+        exists: bool = spark.catalog.tableExists(fully_qualified_table)
+        return bool(exists)
+    except Exception as e:
+        print(f"[ERROR] Exception in table_exists({fully_qualified_table}): {e}")
+        return False
+
+def refresh_table(spark: SparkSession, fully_qualified_table: str) -> None:
+    """
+    Refresh the table metadata in the Spark catalog.
+    """
+    try:
+        spark.catalog.refreshTable(fully_qualified_table)
+        print(f"[REFRESH] Table {fully_qualified_table} refreshed.")
+    except Exception as e:
+        print(f"[REFRESH][ERROR] Could not refresh table {fully_qualified_table}: {e}")
 
 def parse_fully_qualified_table_name(fq_table: str) -> Tuple[str, str, str]:
     """
@@ -21,25 +41,22 @@ def parse_fully_qualified_table_name(fq_table: str) -> Tuple[str, str, str]:
 
     return parts[0], parts[1], parts[2]
 
-
-def table_exists(spark: SparkSession, fully_qualified_table: str) -> bool:
+def spark_sql_to_df(spark: SparkSession, sql: str) -> DataFrame:
     """
-    Returns True if the table exists in the Spark catalog, else False.
-    """
-    try:
-        exists: bool = spark.catalog.tableExists(fully_qualified_table)
-        return bool(exists)
-    except Exception as e:
-        print(f"[ERROR] Exception in table_exists({fully_qualified_table}): {e}")
-        return False
-
-
-def refresh_table(spark: SparkSession, fully_qualified_table: str) -> None:
-    """
-    Refresh the table metadata in the Spark catalog.
+    Run Spark SQL and return the resulting DataFrame.
     """
     try:
-        spark.catalog.refreshTable(fully_qualified_table)
-        print(f"[REFRESH] Table {fully_qualified_table} refreshed.")
+        return spark.sql(sql)
     except Exception as e:
-        print(f"[REFRESH][ERROR] Could not refresh table {fully_qualified_table}: {e}")
+        print(f"[ERROR] spark_sql_to_df failed: {e}\nSQL: {sql}")
+        raise
+
+def spark_df_to_rows(df: DataFrame) -> List[dict]:
+    """
+    Convert a Spark DataFrame to a list of dictionaries (rows).
+    """
+    try:
+        return [row.asDict() for row in df.collect()]
+    except Exception as e:
+        print(f"[ERROR] spark_df_to_rows failed: {e}")
+        raise 

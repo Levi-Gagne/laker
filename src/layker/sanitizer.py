@@ -65,19 +65,6 @@ def sanitize_metadata(cfg: Dict[str, Any]) -> Dict[str, Any]:
 def normalize_dict(d: Dict[Any, Any]) -> Dict[str, str]:
     return {str(k).lower(): sanitize_text(v) for k, v in d.items()}
 
-TYPE_SYNONYMS = {
-    "long":      "bigint",
-    "bigint":    "bigint",
-    "int":       "int",
-    "integer":   "int",
-    "double":    "double",
-    "float":     "float",
-    "string":    "string",
-    "boolean":   "boolean",
-    "timestamp": "timestamp",
-    "date":      "date",
-}
-
 def sanitize_snapshot(snap: Dict[str, Any]) -> Dict[str, Any]:
     clean: Dict[str, Any] = {}
 
