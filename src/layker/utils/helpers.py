@@ -6,12 +6,7 @@ from layker.utils.color import Color
 def parse_fully_qualified_table_name(fq_table: str) -> Tuple[str, str, str]:
     """
     Splits a fully qualified table name into (catalog, schema, table).
-
-        Example: "dq_dev.lmg_sandbox.table1" → ("dq_dev", "lmg_sandbox", "table1")
-
-    Raises:
-        TypeError: If input is not a string.
-        ValueError: If not in catalog.schema.table format.
+        - Example: "dq_dev.lmg_sandbox.table1" → ("dq_dev", "lmg_sandbox", "table1")
     """
     if not isinstance(fq_table, str):
         print(f"{Color.b}{Color.candy_red}[ERROR]{Color.r} fq_table must be a string, got {type(fq_table).__name__}")
