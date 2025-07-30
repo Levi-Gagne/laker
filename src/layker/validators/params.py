@@ -5,15 +5,39 @@ from pathlib import Path
 from typing import Optional, Tuple, Any
 from pyspark.sql import SparkSession
 
+from layker.utils.paths import file_on_disk, resolve_resource_path, list_resource_files
+
 def validate_yaml_path(yaml_path: str) -> str:
+    """
+    Validates the yaml_path as a .yml/.yaml file.
+    - If it matches a resource in layker/resources, returns the resolved resource path.
+    - Otherwise, treats as a disk path (local, workspace, or volume) and validates existence.
+    """
     if not yaml_path:
         raise ValueError("yaml_path is required.")
-    p = Path(yaml_path)
-    if p.suffix.lower() not in {".yml", ".yaml"}:
-        raise ValueError(f"yaml_path must end in .yml/.yaml, got {yaml_path!r}")
-    return str(p)
+
+    # Look for resource match FIRST
+    resource_files = list_resource_files("layker.resources")
+    if yaml_path in resource_files:
+        resolved = resolve_resource_path("layker.resources", yaml_path)
+        if resolved and Path(resolved).suffix.lower() in {".yml", ".yaml"}:
+            return resolved
+        else:
+            raise ValueError(f"yaml_path '{yaml_path}' found in resources but could not be resolved.")
+    
+    # Otherwise, treat as disk path
+    disk_path = file_on_disk(yaml_path)
+    if disk_path and Path(disk_path).suffix.lower() in {".yml", ".yaml"}:
+        return disk_path
+
+    raise ValueError(
+        f"yaml_path '{yaml_path}' not found as a packaged resource or file on disk."
+    )
 
 def validate_log_ddl(log_ddl: Optional[str]) -> Optional[str]:
+    """
+    Validates log_ddl as a .yml/.yaml file, if provided.
+    """
     if not log_ddl:
         return None
     ld = Path(log_ddl)
@@ -22,6 +46,10 @@ def validate_log_ddl(log_ddl: Optional[str]) -> Optional[str]:
     return str(ld)
 
 def validate_mode(mode: Optional[str]) -> str:
+    """
+    Ensures mode is one of 'validate', 'diff', 'apply', 'all'.
+    Defaults to 'apply'.
+    """
     if not mode:
         return "apply"
     m = mode.lower().strip()
@@ -31,15 +59,26 @@ def validate_mode(mode: Optional[str]) -> str:
     return m
 
 def validate_env(env: Optional[str]) -> Optional[str]:
+    """
+    Validates env for allowed characters (alphanumeric or underscore).
+    """
     if not env:
         return None
     e = env.strip()
     if e and not re.fullmatch(r"[A-Za-z0-9_]+", e):
-        raise ValueError(f"env may only contain letters, numbers, or underscores, got {env!r}")
+        raise ValueError(
+            f"env may only contain letters, numbers, or underscores, got {env!r}"
+        )
     return e
 
 def validate_audit_log_table(audit_log_table: Any) -> Any:
-    # Accept True, False, None, str (YAML path or catalog.schema.table)
+    """
+    Validates audit_log_table parameter. Accepts:
+      - True, False, None
+      - str ending in .yml/.yaml
+      - str formatted as catalog.schema.table
+    Returns value as-is if valid.
+    """
     if audit_log_table in (True, False, None):
         return audit_log_table
     if isinstance(audit_log_table, str):
@@ -57,6 +96,9 @@ def validate_audit_log_table(audit_log_table: Any) -> Any:
     )
 
 def validate_spark(spark: Any) -> SparkSession:
+    """
+    Validates spark parameter is a SparkSession.
+    """
     if not isinstance(spark, SparkSession):
         raise ValueError(f"spark must be a pyspark.sql.SparkSession, got {type(spark).__name__}")
     return spark
@@ -70,10 +112,9 @@ def validate_params(
     spark: Any
 ) -> Tuple[str, Optional[str], Any]:
     """
-    Validate & normalize run_table_load parameters.
+    Validates and normalizes all run_table_load parameters.
     Returns (mode, env, audit_log_table) cleaned.
     Raises ValueError on invalid input.
-    - yaml_path, log_ddl, mode, env, audit_log_table, spark
     """
     validate_yaml_path(yaml_path)
     validate_log_ddl(log_ddl)
