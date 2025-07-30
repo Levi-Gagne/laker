@@ -2,14 +2,50 @@
 
 from typing import List, Dict, Any, Optional
 import re
-from pyspark.sql import SparkSession
-from layker.utils.spark import spark_sql_to_rows
-from layker.utils.helpers import parse_fully_qualified_table_name
+from layker.utils.table import parse_fully_qualified_table_name
+
+SNAPSHOT_QUERIES = {
+    "table_tags": {
+        "table": "system.information_schema.table_tags",
+        "columns": ["tag_name", "tag_value"],
+    },
+    "column_tags": {
+        "table": "system.information_schema.column_tags",
+        "columns": ["column_name", "tag_name", "tag_value"],
+    },
+    "row_filters": {
+        "table": "system.information_schema.row_filters",
+        "columns": ["filter_name", "target_columns"],
+    },
+    "constraint_table_usage": {
+        "table": "system.information_schema.constraint_table_usage",
+        "columns": ["constraint_name"],
+    },
+    "constraint_column_usage": {
+        "table": "system.information_schema.constraint_column_usage",
+        "columns": ["column_name", "constraint_name"],
+    },
+}
+
+def build_metadata_sql(kind: str, fq_table: str) -> str:
+    """
+    Builds the SQL string for querying metadata tables using SNAPSHOT_QUERIES config.
+    """
+    catalog, schema, table = parse_fully_qualified_table_name(fq_table)
+    config = SNAPSHOT_QUERIES.get(kind)
+    if not config:
+        raise ValueError(f"[ERROR] Unsupported metadata query kind: {kind}")
+
+    columns = ", ".join(config["columns"])
+    return f"""
+        SELECT {columns}
+        FROM {config['table']}
+        WHERE catalog_name = '{catalog}'
+          AND schema_name = '{schema}'
+          AND table_name = '{table}'
+    """
 
 def extract_columns(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Extract column definitions from DESCRIBE TABLE EXTENDED output.
-    """
     columns = []
     for row in describe_rows:
         col_name = (row.get("col_name") or "").strip()
@@ -28,9 +64,6 @@ def extract_columns(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     return columns
 
 def extract_partitioned_by(describe_rows: List[Dict[str, Any]]) -> List[str]:
-    """
-    Get partition columns from DESCRIBE TABLE EXTENDED output.
-    """
     collecting = False
     partition_cols = []
     for row in describe_rows:
@@ -47,7 +80,7 @@ def extract_partitioned_by(describe_rows: List[Dict[str, Any]]) -> List[str]:
 
 def extract_table_details(describe_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Extract catalog, schema, table, owner, comment, and table_properties from DESCRIBE output.
+    Extract owner, comment, and table_properties from DESCRIBE EXTENDED output.
     """
     details = {}
     table_properties = {}
@@ -61,13 +94,7 @@ def extract_table_details(describe_rows: List[Dict[str, Any]]) -> Dict[str, Any]
         if in_details:
             if not col_name or col_name.startswith("#"):
                 break
-            if col_name == "Catalog":
-                details["catalog"] = data_type
-            elif col_name == "Database":
-                details["schema"] = data_type
-            elif col_name == "Table":
-                details["table"] = data_type
-            elif col_name == "Owner":
+            if col_name == "Owner":
                 details["owner"] = data_type
             elif col_name == "Comment":
                 details["comment"] = data_type
@@ -80,9 +107,6 @@ def extract_table_details(describe_rows: List[Dict[str, Any]]) -> Dict[str, Any]
     return details
 
 def extract_constraints(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    """
-    Extract constraints from DESCRIBE TABLE EXTENDED output.
-    """
     constraints = []
     in_constraints = False
     for row in describe_rows:
@@ -99,9 +123,6 @@ def extract_constraints(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, s
     return constraints
 
 def extract_primary_key(describe_rows: List[Dict[str, Any]]) -> Optional[List[str]]:
-    """
-    Return list of primary key columns if present, else None.
-    """
     cons = extract_constraints(describe_rows)
     for c in cons:
         if "PRIMARY KEY" in c["type"]:
@@ -109,83 +130,3 @@ def extract_primary_key(describe_rows: List[Dict[str, Any]]) -> Optional[List[st
             if m:
                 return [col.strip().replace("`", "") for col in m.group(1).split(",")]
     return None
-
-def get_table_tags(spark: SparkSession, fq_table: str) -> Dict[str, str]:
-    """
-    Get all table tags as a dict from information_schema.table_tags.
-    """
-    catalog, schema, table = parse_fully_qualified_table_name(fq_table)
-    sql = f"""
-        SELECT tag_name, tag_value
-        FROM system.information_schema.table_tags
-        WHERE catalog_name = '{catalog}'
-          AND schema_name = '{schema}'
-          AND table_name = '{table}'
-    """
-    rows = spark_sql_to_rows(spark, sql)
-    return {row['tag_name']: row['tag_value'] for row in rows}
-
-def get_column_tags(spark: SparkSession, fq_table: str) -> Dict[str, Dict[str, str]]:
-    """
-    Get all column tags for each column from information_schema.column_tags.
-    """
-    catalog, schema, table = parse_fully_qualified_table_name(fq_table)
-    sql = f"""
-        SELECT column_name, tag_name, tag_value
-        FROM system.information_schema.column_tags
-        WHERE catalog_name = '{catalog}'
-          AND schema_name = '{schema}'
-          AND table_name = '{table}'
-    """
-    rows = spark_sql_to_rows(spark, sql)
-    col_tags = {}
-    for row in rows:
-        col = row['column_name']
-        tag = row['tag_name']
-        val = row['tag_value']
-        if col not in col_tags:
-            col_tags[col] = {}
-        col_tags[col][tag] = val
-    return col_tags
-
-def get_row_filters(spark: SparkSession, fq_table: str) -> List[dict]:
-    """
-    Get all row filters for a table as a list of dicts.
-    """
-    catalog, schema, table = parse_fully_qualified_table_name(fq_table)
-    sql = f"""
-        SELECT filter_name, target_columns
-        FROM system.information_schema.row_filters
-        WHERE table_catalog = '{catalog}'
-          AND table_schema = '{schema}'
-          AND table_name = '{table}'
-    """
-    return spark_sql_to_rows(spark, sql)
-
-def get_constraint_table_usage(spark: SparkSession, fq_table: str) -> List[dict]:
-    """
-    Get table-level constraints from information_schema.constraint_table_usage.
-    """
-    catalog, schema, table = parse_fully_qualified_table_name(fq_table)
-    sql = f"""
-        SELECT constraint_name
-        FROM system.information_schema.constraint_table_usage
-        WHERE table_catalog = '{catalog}'
-          AND table_schema = '{schema}'
-          AND table_name = '{table}'
-    """
-    return spark_sql_to_rows(spark, sql)
-
-def get_constraint_column_usage(spark: SparkSession, fq_table: str) -> List[dict]:
-    """
-    Get all column-level constraints from information_schema.constraint_column_usage.
-    """
-    catalog, schema, table = parse_fully_qualified_table_name(fq_table)
-    sql = f"""
-        SELECT column_name, constraint_name
-        FROM system.information_schema.constraint_column_usage
-        WHERE table_catalog = '{catalog}'
-          AND table_schema = '{schema}'
-          AND table_name = '{table}'
-    """
-    return spark_sql_to_rows(spark, sql)
