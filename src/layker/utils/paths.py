@@ -4,12 +4,22 @@ import importlib.resources
 from pathlib import Path
 from typing import Optional, List
 
+
 def file_on_disk(path_str: str) -> Optional[str]:
     """
     Returns the absolute path if it exists as a file on disk, else None.
     """
     p = Path(path_str)
     return str(p.resolve()) if p.is_file() else None
+
+
+def is_volume_path(path_str: str) -> bool:
+    """
+    Checks if the path looks like a Databricks Volume path.
+    Example: "/Volumes/my_catalog/my_schema/my_file.yaml"
+    """
+    return path_str.startswith("/Volumes/")
+
 
 def list_resource_files(package: str) -> List[str]:
     """
@@ -20,6 +30,7 @@ def list_resource_files(package: str) -> List[str]:
         return [res.name for res in importlib.resources.files(package).iterdir() if res.is_file()]
     except Exception:
         return []
+
 
 def resolve_resource_path(package: str, resource_name: str) -> Optional[str]:
     """
