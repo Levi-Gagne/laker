@@ -1,4 +1,4 @@
-# src/layker/table.py
+# src/layker/metadata.py
 
 from typing import List, Dict, Any, Optional
 import re
@@ -121,12 +121,3 @@ def extract_constraints(describe_rows: List[Dict[str, Any]]) -> List[Dict[str, s
             if col_name and data_type:
                 constraints.append({"name": col_name, "type": data_type})
     return constraints
-
-def extract_primary_key(describe_rows: List[Dict[str, Any]]) -> Optional[List[str]]:
-    cons = extract_constraints(describe_rows)
-    for c in cons:
-        if "PRIMARY KEY" in c["type"]:
-            m = re.search(r"\((.*?)\)", c["type"])
-            if m:
-                return [col.strip().replace("`", "") for col in m.group(1).split(",")]
-    return None
