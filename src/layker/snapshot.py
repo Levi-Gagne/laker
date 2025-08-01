@@ -1,4 +1,4 @@
-# src/layker/metadata.py
+# src/layker/snapshot.py
 
 from typing import List, Dict, Any, Optional
 import re
