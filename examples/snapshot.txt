@@ -1,219 +1,35 @@
-table_metadata_example = {
-    "catalog": "dq_dev",
-    "schema": "lmg_sandbox",
-    "table": "config_driven_table_example",
-    "primary_key": ["example_id"],
-    "partitioned_by": ["event_date"],
+{
+    "full_table_name": "",
+    "catalog": "",
+    "schema": "",
+    "table": "",
+    "primary_key": [],
+    "foreign_keys": {},
     "unique_keys": [],
-    "foreign_keys": {
-        "fk_events_date": {
-            "columns": ["event_date"],
-            "reference_table": "calendars.dates",
-            "reference_columns": ["date"]
-        }
-    },
-    "table_check_constraints": {
-        "constraint_1": {
-            "name": "check_event_date_past",
-            "expression": "event_date <= current_date()"
-        }
-    },
-    "row_filters": {
-        "row_filter_1": {
-            "name": "rls_internal_only",
-            "expression": "classification = 'internal'"
-        }
-    },
-    "tags": {
-        "team": "dq",
-        "project": "poc",
-        "data_owner": "levi.gagne@claconnect.com",
-        "classification": "internal"
-    },
-    "owner": "levi.gagne@claconnect.com",
-    "comment": (
-        "**Table:** dq_dev.lmg_sandbox.config_driven_table_example\n\n"
-        "**Governance**\n"
-        "- YAML is the source of truth; changes in UI are not tracked.\n"
-        "- Required: catalog, schema, table, at least one column with name/datatype.\n"
-        "- Use partitioned_by for scalability if needed.\n\n"
-        "**Evolution**\n"
-        "- Adding columns to the end is supported.\n"
-        "- Renaming columns (by position/type) is supported.\n"
-        "- Data type changes or column drops require matching positions.\n"
-        "- Foreign keys here are not enforced—reference only."
-    ),
-    "table_properties": {
-        "delta.columnMapping.mode": "name",
-        "delta.minReaderVersion": "2",
-        "delta.minWriterVersion": "5"
-    },
+    "partitioned_by": [],
+    "tags": {},
+    "row_filters": {},
+    "table_check_constraints": {},
+    "table_properties": {},
+    "comment": "",
+    "owner": "",
     "columns": {
         "1": {
-            "name": "example_id",
-            "datatype": "string",
-            "nullable": False,
+            "name": "",
+            "datatype": "",
+            "nullable": True,
             "active": True,
-            "comment": "Primary key: unique row id for this table.",
-            "tags": {
-                "pii": "false",          # <-- string, not boolean
-                "business_key": "yes",   # <-- string, not boolean
-                "sensitive": "true"
-            },
-            "column_masking_rule": "MASKED WITH SHA256",
-            "column_check_constraints": {
-                "constraint_1": {
-                    "name": "check_example_id_nonempty",
-                    "expression": "length(example_id) > 0"
-                },
-                "constraint_2": {
-                    "name": "check_example_id_not_test",
-                    "expression": "example_id != 'TEST'"
-                }
-            }
+            "comment": "",
+            "tags": {},
+            "column_masking_rule": "",
+            "column_check_constraints": {}
         },
         "2": {
-            "name": "minimal_col",
-            "datatype": "string",
+            "name": "",
+            "datatype": "",
             "nullable": True,
             "active": True,
             "comment": "",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "3": {
-            "name": "column_1",
-            "datatype": "string",
-            "nullable": True,
-            "active": True,
-            "comment": "",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {
-                "constraint_1": {
-                    "name": "check_column_1_not_null_when_active",
-                    "expression": "active = true OR column_1 IS NOT NULL"
-                },
-                "constraint_2": {
-                    "name": "check_column_1_length_limit",
-                    "expression": "length(column_1) <= 100"
-                }
-            }
-        },
-        "4": {
-            "name": "column_2",
-            "datatype": "int",
-            "nullable": False,
-            "active": True,
-            "comment": "Integer value for sample calculations.",
-            "tags": {
-                "business_key": "no"
-            },
-            "column_masking_rule": "",
-            "column_check_constraints": {
-                "positive": {
-                    "name": "check_column_2_positive",
-                    "expression": "column_2 >= 0"
-                },
-                "even": {
-                    "name": "check_column_2_even",
-                    "expression": "column_2 % 2 = 0"
-                }
-            }
-        },
-        "5": {
-            "name": "column_3",
-            "datatype": "double",
-            "nullable": True,
-            "active": True,
-            "comment": "Numeric column for analytic tests.",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "6": {
-            "name": "event_date",
-            "datatype": "date",
-            "nullable": False,
-            "active": True,
-            "comment": "Event date for partitioning.",
-            "tags": {
-                "partition_key": "true"
-            },
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "7": {
-            "name": "email",
-            "datatype": "string",
-            "nullable": False,
-            "active": True,
-            "comment": "User email address. Unique constraint applied.",
-            "tags": {
-                "pii": "true"
-            },
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "8": {
-            "name": "user_id",
-            "datatype": "string",
-            "nullable": False,
-            "active": True,
-            "comment": "Alternate user id for composite unique constraint.",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "9": {
-            "name": "group_id",
-            "datatype": "string",
-            "nullable": False,
-            "active": True,
-            "comment": "Group id for composite unique constraint.",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "10": {
-            "name": "created_at",
-            "datatype": "timestamp",
-            "nullable": False,
-            "active": True,
-            "comment": "Timestamp when row was created.",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "11": {
-            "name": "created_by",
-            "datatype": "string",
-            "nullable": False,
-            "active": True,
-            "comment": "System or user that created this row.",
-            "tags": {
-                "audit": "true"
-            },
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "12": {
-            "name": "updated_at",
-            "datatype": "timestamp",
-            "nullable": True,
-            "active": True,
-            "comment": "Timestamp for the most recent update to this row.",
-            "tags": {},
-            "column_masking_rule": "",
-            "column_check_constraints": {}
-        },
-        "13": {
-            "name": "updated_by",
-            "datatype": "string",
-            "nullable": True,
-            "active": True,
-            "comment": "System or user that last updated this row.",
             "tags": {},
             "column_masking_rule": "",
             "column_check_constraints": {}
