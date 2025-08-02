@@ -158,3 +158,21 @@ class TableSchemaConfig:
             ccc = col.get("column_check_constraints", {})
             if ccc:
                 print(f"      Column Check Constraints: {ccc}")
+                
+
+
+#######################################
+
+
+# Example usage in notebook or test script
+
+from layker.yaml import TableSchemaConfig
+
+# Path to your YAML in the resources folder
+yaml_path = "/Workspace/Users/levi.gagne@claconnect.com/resources/example.yaml"
+
+cfg = TableSchemaConfig(yaml_path, env="dev")
+table_meta = cfg.build_table_metadata_dict()
+
+import pprint
+pprint.pprint(table_meta, width=120)
