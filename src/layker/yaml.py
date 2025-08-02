@@ -2,39 +2,11 @@
 
 import yaml
 from typing import Any, Dict, List, Optional, Union
-from pyspark.sql.types import (
-    StructType, StructField,
-    StringType, IntegerType, LongType, DoubleType, BooleanType,
-    TimestampType, DateType, ArrayType, MapType, BinaryType, ByteType, DecimalType
-)
-
-SPARK_TYPE_MAP = {
-    "string": StringType(),
-    "str": StringType(),
-    "varchar": StringType(),
-    "int": IntegerType(),
-    "integer": IntegerType(),
-    "bigint": LongType(),
-    "long": LongType(),
-    "smallint": IntegerType(),
-    "short": IntegerType(),
-    "boolean": BooleanType(),
-    "bool": BooleanType(),
-    "double": DoubleType(),
-    "float": DoubleType(),
-    "decimal": DecimalType(38, 18),
-    "date": DateType(),
-    "timestamp": TimestampType(),
-    "array": ArrayType(StringType()),
-    "map": MapType(StringType(), StringType()),
-    "binary": BinaryType(),
-    "byte": ByteType(),
-}
 
 class TableSchemaConfig:
     """
-    Loader for YAML DDL config files. Exposes all config blocks with clean API.
-    All logic for dynamic env, catalog, and nested constraints/keys is handled here.
+    Loader for YAML DDL config files. Exposes all config blocks with a clean API.
+    Handles dynamic env, catalog suffixes, and nested constraints/keys.
     """
 
     def __init__(self, config_path: str, env: Optional[str] = None):
@@ -116,22 +88,13 @@ class TableSchemaConfig:
     def foreign_keys(self) -> Dict[str, Any]:
         return self._config.get("foreign_keys", {})
 
-    def get_foreign_key(self, name: str) -> Optional[Dict[str, Any]]:
-        return self.foreign_keys.get(name)
-
     @property
     def table_check_constraints(self) -> Dict[str, Any]:
         return self._config.get("table_check_constraints", {})
 
-    def get_check_constraint(self, key: str) -> Optional[Dict[str, Any]]:
-        return self.table_check_constraints.get(key)
-
     @property
     def row_filters(self) -> Dict[str, Any]:
         return self._config.get("row_filters", {})
-
-    def get_row_filter(self, key: str) -> Optional[Dict[str, Any]]:
-        return self.row_filters.get(key)
 
     @property
     def columns(self) -> List[Dict[str, Any]]:
@@ -140,62 +103,42 @@ class TableSchemaConfig:
         sorted_keys = sorted(map(int, cols_dict_str.keys()))
         return [cols_dict_str[str(k)] for k in sorted_keys]
 
-    @property
-    def column_names(self) -> List[str]:
-        return [col["name"] for col in self.columns]
-
-    @property
-    def column_by_name(self) -> Dict[str, Dict[str, Any]]:
-        return {col["name"]: col for col in self.columns}
-
-    def get_column(self, col_name: str) -> Optional[Dict[str, Any]]:
-        return self.column_by_name.get(col_name)
-
-    @property
-    def column_default_values(self) -> Dict[str, Any]:
-        return {col["name"]: col.get("default_value", None) for col in self.columns}
-
-    @property
-    def column_variable_values(self) -> Dict[str, Any]:
-        return {col["name"]: col.get("variable_value", None) for col in self.columns}
-
-    @property
-    def column_allowed_values(self) -> Dict[str, List[Any]]:
-        return {col["name"]: col.get("allowed_values", []) for col in self.columns}
-
-    def get_allowed_values(self, col_name: str) -> List[Any]:
-        col = self.get_column(col_name)
-        return col.get("allowed_values", []) if col else []
-
-    def get_column_check_constraints(self, col_name: str, key: Optional[str] = None) -> Union[Dict[str, Any], Optional[Dict[str, Any]]]:
-        col = self.get_column(col_name)
-        ccs = col.get("column_check_constraints", {}) if col else {}
-        if key:
-            return ccs.get(key)
-        return ccs
-
-    @property
-    def spark_struct_fields(self) -> List[StructField]:
-        fields = []
+    def build_table_metadata_dict(self) -> Dict[str, Any]:
+        # Always return all possible keys, filling blanks as needed
+        result = {
+            "catalog": self.catalog,
+            "schema": self.schema,
+            "table": self.table,
+            "full_table_name": self.full_table_name,
+            "owner": self.owner if self.owner is not None else "",
+            "tags": self.tags if self.tags else {},
+            "properties": self.properties if self.properties else {},
+            "table_comment": self.table_comment if self.table_comment is not None else "",
+            "table_properties": self.table_properties if self.table_properties else {},
+            "primary_key": self.primary_key if self.primary_key else [],
+            "partitioned_by": self.partitioned_by if self.partitioned_by else [],
+            "unique_keys": self.unique_keys if self.unique_keys else [],
+            "foreign_keys": self.foreign_keys if self.foreign_keys else {},
+            "table_check_constraints": self.table_check_constraints if self.table_check_constraints else {},
+            "row_filters": self.row_filters if self.row_filters else {},
+            "columns": [],
+        }
+        # Always show all columns, with expected keys
         for col in self.columns:
-            col_type = col["datatype"].lower()
-            spark_type = SPARK_TYPE_MAP.get(col_type)
-            if not spark_type:
-                raise ValueError(f"Unsupported catalog datatype '{col_type}' in column '{col['name']}'.")
-            fields.append(
-                StructField(
-                    col["name"],
-                    spark_type,
-                    col.get("nullable", True)
-                )
-            )
-        return fields
-
-    @property
-    def spark_schema(self) -> StructType:
-        return StructType(self.spark_struct_fields)
+            result["columns"].append({
+                "name": col.get("name", ""),
+                "datatype": col.get("datatype", ""),
+                "nullable": col.get("nullable", True),
+                "active": col.get("active", True),
+                "comment": col.get("comment", ""),
+                "tags": col.get("tags", {}),
+                "column_masking_rule": col.get("column_masking_rule", ""),
+                "column_check_constraints": col.get("column_check_constraints", {}),
+            })
+        return result
 
     def describe(self) -> None:
+        # Helper for dev/test use, not called in prod
         print(f"Table: {self.full_table_name}")
         print(f"  Owner: {self.owner}")
         print(f"  Tags: {self.tags}")
@@ -209,12 +152,9 @@ class TableSchemaConfig:
         print(f"  Columns:")
         for i, col in enumerate(self.columns, 1):
             print(
-                f"    {i}: {col['name']} ({col['datatype']}, nullable={col.get('nullable', True)}) | "
-                f"comment={col.get('comment', '')}, tags={col.get('tags', {})}, active={col.get('active', True)}"
+                f"    {i}: {col.get('name','')} ({col.get('datatype','')}, nullable={col.get('nullable', True)}) | "
+                f"comment={col.get('comment','')}, tags={col.get('tags',{})}, active={col.get('active', True)}"
             )
-            allowed = col.get("allowed_values", [])
-            if allowed:
-                print(f"      Allowed Values: {allowed}")
             ccc = col.get("column_check_constraints", {})
             if ccc:
                 print(f"      Column Check Constraints: {ccc}")
