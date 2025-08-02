@@ -1,0 +1,163 @@
+diff_example = {
+    "dq_dev.lmg_sandbox.config_driven_table_example": {
+        "add": {
+            "full_table_name": "",
+            "catalog": "",
+            "schema": "",
+            "table": "",
+            "primary_key": [],
+            "foreign_keys": {},
+            "unique_keys": [],
+            "partitioned_by": [],
+            "table_tags": {},
+            "row_filters": {},
+            "table_check_constraints": {},
+            "table_properties": {},
+            "table_comment": "",
+            "owner": "",
+            "columns": {
+                1: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {
+                        "constraint_1": {
+                            "name": "",
+                            "expression": ""
+                        }
+                    }
+                },
+                2: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {
+                        "constraint_1": {
+                            "name": "",
+                            "expression": ""
+                        }
+                    }
+                },
+                3: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {
+                        "constraint_1": {
+                            "name": "",
+                            "expression": ""
+                        }
+                    }
+                }
+            }
+        },
+        "update": {
+            "full_table_name": "",
+            "catalog": "",
+            "schema": "",
+            "table": "",
+            "primary_key": [],
+            "foreign_keys": {},
+            "unique_keys": [],
+            "partitioned_by": [],
+            "table_tags": {},
+            "row_filters": {},
+            "table_check_constraints": {},
+            "table_properties": {},
+            "table_comment": "",
+            "owner": "",
+            "columns": {
+                1: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {}
+                },
+                2: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {}
+                },
+                3: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {}
+                }
+            }
+        },
+        "remove": {
+            "full_table_name": "",
+            "catalog": "",
+            "schema": "",
+            "table": "",
+            "primary_key": [],
+            "foreign_keys": {},
+            "unique_keys": [],
+            "partitioned_by": [],
+            "table_tags": {},
+            "row_filters": {},
+            "table_check_constraints": {},
+            "table_properties": {},
+            "table_comment": "",
+            "owner": "",
+            "columns": {
+                1: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {}
+                },
+                2: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {}
+                },
+                3: {
+                    "name": "",
+                    "datatype": "",
+                    "nullable": "",
+                    "active": "",
+                    "column_comment": "",
+                    "column_tags": {},
+                    "column_masking_rule": "",
+                    "column_check_constraints": {}
+                }
+            }
+        }
+    }
+}
