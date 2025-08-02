@@ -1,7 +1,7 @@
 # src/layker/yaml.py
 
 import yaml
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 class TableSchemaConfig:
     """
@@ -51,8 +51,8 @@ class TableSchemaConfig:
         return f"{cat_full}.{sch}.{tbl}"
 
     @property
-    def owner(self) -> Optional[str]:
-        return self._config.get("owner")
+    def owner(self) -> str:
+        return self._config.get("owner", "")
 
     @property
     def tags(self) -> Dict[str, Any]:
@@ -63,7 +63,7 @@ class TableSchemaConfig:
         return self._config.get("properties", {})
 
     @property
-    def table_comment(self) -> Optional[str]:
+    def table_comment(self) -> str:
         return self.properties.get("comment", "")
 
     @property
@@ -104,28 +104,28 @@ class TableSchemaConfig:
         return [cols_dict_str[str(k)] for k in sorted_keys]
 
     def build_table_metadata_dict(self) -> Dict[str, Any]:
-        # Always return all possible keys, filling blanks as needed
+        # Return dict with keys in the exact order you want — relies on Python 3.7+ insertion order preservation
         result = {
+            "full_table_name": self.full_table_name,
             "catalog": self.catalog,
             "schema": self.schema,
             "table": self.table,
-            "full_table_name": self.full_table_name,
-            "owner": self.owner if self.owner is not None else "",
-            "tags": self.tags if self.tags else {},
-            "properties": self.properties if self.properties else {},
-            "table_comment": self.table_comment if self.table_comment is not None else "",
-            "table_properties": self.table_properties if self.table_properties else {},
             "primary_key": self.primary_key if self.primary_key else [],
-            "partitioned_by": self.partitioned_by if self.partitioned_by else [],
-            "unique_keys": self.unique_keys if self.unique_keys else [],
             "foreign_keys": self.foreign_keys if self.foreign_keys else {},
-            "table_check_constraints": self.table_check_constraints if self.table_check_constraints else {},
+            "unique_keys": self.unique_keys if self.unique_keys else [],
+            "partitioned_by": self.partitioned_by if self.partitioned_by else [],
+            "tags": self.tags if self.tags else {},
             "row_filters": self.row_filters if self.row_filters else {},
-            "columns": [],
+            "table_check_constraints": self.table_check_constraints if self.table_check_constraints else {},
+            "table_properties": self.table_properties if self.table_properties else {},
+            "comment": self.table_comment,
+            "owner": self.owner,
+            "columns": {},
         }
-        # Always show all columns, with expected keys
-        for col in self.columns:
-            result["columns"].append({
+
+        # Numbered columns with requested keys & order
+        for idx, col in enumerate(self.columns, 1):
+            result["columns"][idx] = {
                 "name": col.get("name", ""),
                 "datatype": col.get("datatype", ""),
                 "nullable": col.get("nullable", True),
@@ -134,11 +134,12 @@ class TableSchemaConfig:
                 "tags": col.get("tags", {}),
                 "column_masking_rule": col.get("column_masking_rule", ""),
                 "column_check_constraints": col.get("column_check_constraints", {}),
-            })
+            }
+
         return result
 
     def describe(self) -> None:
-        # Helper for dev/test use, not called in prod
+        # Helper for dev/test use only
         print(f"Table: {self.full_table_name}")
         print(f"  Owner: {self.owner}")
         print(f"  Tags: {self.tags}")
@@ -158,21 +159,3 @@ class TableSchemaConfig:
             ccc = col.get("column_check_constraints", {})
             if ccc:
                 print(f"      Column Check Constraints: {ccc}")
-                
-
-
-#######################################
-
-
-# Example usage in notebook or test script
-
-from layker.yaml import TableSchemaConfig
-
-# Path to your YAML in the resources folder
-yaml_path = "/Workspace/Users/levi.gagne@claconnect.com/resources/example.yaml"
-
-cfg = TableSchemaConfig(yaml_path, env="dev")
-table_meta = cfg.build_table_metadata_dict()
-
-import pprint
-pprint.pprint(table_meta, width=120)
