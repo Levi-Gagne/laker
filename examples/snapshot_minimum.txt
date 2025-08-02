@@ -1,0 +1,29 @@
+table_metadata_minimal = {
+    "catalog": "",
+    "schema": "",
+    "table": "",
+    "primary_key": [],
+    "partitioned_by": [],
+    "unique_keys": [],
+    "foreign_keys": {},
+    "table_check_constraints": {},
+    "row_filters": {},
+    "tags": {},
+    "owner": "",
+    "comment": "",
+    "table_properties": {},
+    "columns": {
+        # At minimum, you must have at least one column. 
+        # If you want a truly minimal column:
+        "1": {
+            "name": "",
+            "datatype": "",
+            "nullable": True,
+            "active": True,
+            "comment": "",
+            "tags": {},
+            "column_masking_rule": "",
+            "column_check_constraints": {}
+        }
+    }
+}
