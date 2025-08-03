@@ -1,9 +1,8 @@
-# src/layker/snapshot.py
+# src/layker/snapshot_table.py
 
 import re
 from typing import Any, Dict, List, Optional
 from pyspark.sql import SparkSession
-
 
 class TableSnapshot:
     SNAPSHOT_QUERIES = {
@@ -62,7 +61,7 @@ class TableSnapshot:
                 sql = self._build_metadata_sql(kind)
                 df = self.spark.sql(sql)
                 results[kind] = [row.asDict() for row in df.collect()]
-            except Exception as e:
+            except Exception:
                 results[kind] = []
         return results
 
@@ -89,18 +88,21 @@ class TableSnapshot:
         return columns
 
     def _extract_partitioned_by(self, describe_rows: List[Dict[str, Any]]) -> List[str]:
+        # More robust: handle extra headers, blank lines, and section switches.
         collecting = False
         partition_cols = []
         for row in describe_rows:
             col_name = (row.get("col_name") or "").strip()
+            # Start block
             if col_name == "# Partition Information":
                 collecting = True
                 continue
             if collecting:
-                if not col_name or col_name.startswith("#"):
-                    break
-                if col_name != "# col_name":
-                    partition_cols.append(col_name)
+                if col_name.startswith("#") and col_name != "# col_name":
+                    break  # new section begins
+                if col_name == "" or col_name == "# col_name":
+                    continue  # skip headers/empties
+                partition_cols.append(col_name)
         return partition_cols
 
     def _extract_table_details(self, describe_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -159,28 +161,27 @@ class TableSnapshot:
                 "column_check_constraints": col_checks.get(name, {}),
             }
         return columns
+    
+    def _get_foreign_keys(self, uc_metadata: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+        return {}
+
+    def _get_unique_keys(self, uc_metadata: Dict[str, List[Dict[str, Any]]]) -> List[List[str]]:
+        return []
 
     def build_table_metadata_dict(self) -> Dict[str, Any]:
-        # Pull data
         uc_metadata = self._get_metadata_snapshot()
         describe_rows = self._get_describe_rows()
 
         catalog, schema, table = self.catalog, self.schema, self.table
 
-        # Parse table tags
         table_tags = {row["tag_name"]: row["tag_value"] for row in uc_metadata.get("table_tags", [])}
-
-        # Extract table details
         details = self._extract_table_details(describe_rows)
-
-        # Extract table check constraints (using table properties keys starting with delta.constraints)
         table_check_constraints = {
             k: {"name": k, "expression": v}
             for k, v in details.get("table_properties", {}).items()
             if k.startswith("delta.constraints")
         }
 
-        # Row filters
         row_filters = {}
         for row in uc_metadata.get("row_filters", []):
             fname = row.get("filter_name")
@@ -190,13 +191,10 @@ class TableSnapshot:
                     "expression": row.get("target_columns", "")
                 }
 
-        # Partition columns
+        # Partition columns (fixed logic)
         partitioned_by = self._extract_partitioned_by(describe_rows)
 
-        # Constraints
         constraints = self._extract_constraints(describe_rows)
-
-        # Primary key from constraints (parse SQL text)
         pk = []
         for c in constraints:
             if "PRIMARY KEY" in c["type"]:
@@ -204,10 +202,7 @@ class TableSnapshot:
                 if m:
                     pk = [col.strip().replace("`", "") for col in m.group(1).split(",")]
 
-        # Raw columns
         columns_raw = self._extract_columns(describe_rows)
-
-        # Build column tags lookup
         col_tag_lookup = {}
         for row in uc_metadata.get("column_tags", []):
             col = row["column_name"]
@@ -215,7 +210,6 @@ class TableSnapshot:
                 col_tag_lookup[col] = {}
             col_tag_lookup[col][row["tag_name"]] = row["tag_value"]
 
-        # Build column check constraints lookup
         col_constraint_lookup = {}
         for row in uc_metadata.get("constraint_column_usage", []):
             col = row["column_name"]
@@ -224,7 +218,6 @@ class TableSnapshot:
                 col_constraint_lookup[col] = {}
             col_constraint_lookup[col][cons] = {"name": cons}  # no expression parsing here
 
-        # Compose columns dict keyed by 1-based index
         columns = self._build_columns(columns_raw, col_tag_lookup, col_constraint_lookup)
 
         return {
@@ -244,15 +237,6 @@ class TableSnapshot:
             "owner": details.get("owner", ""),
             "columns": columns,
         }
-
-    def _get_foreign_keys(self, uc_metadata: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
-        # Could be enhanced to parse foreign keys if available from metadata
-        return {}
-
-    def _get_unique_keys(self, uc_metadata: Dict[str, List[Dict[str, Any]]]) -> List[List[str]]:
-        # Could be enhanced to parse unique keys if available from metadata
-        return []
-
 
 # Usage example:
 # spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()

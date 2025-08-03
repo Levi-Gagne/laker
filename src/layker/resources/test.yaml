@@ -1,0 +1,217 @@
+# ===========================
+# YAML TABLE DDL TEMPLATE — ALL OPTIONS & EXAMPLES
+# ===========================
+
+catalog: dq_dev      # Required. If ends with '_', will append env (e.g., dq_dev_{env}). If not, used as is.
+schema: lmg_sandbox  # Required. Schema name in catalog.
+table: config_driven_table_example   # Required. Table name.
+
+primary_key: [example_id]     # Required for DDL. Must match at least one column below.
+partitioned_by: [event_date]  # Optional; for large/time-based tables.
+
+unique_keys: []    # Optional; list of lists, each inner list = unique constraint.
+
+# -- Foreign keys are not enforced in Databricks (informational only).
+#    Name each FK uniquely. Columns, reference_table, reference_columns: required, must use these keys.
+foreign_keys: {}
+
+# -- Table-level CHECK constraints
+table_check_constraints: {}
+
+# -- Row-level filters (for reference; can be any unique key)
+row_filters: {}
+
+# -- Arbitrary table-level tags
+tags:
+  team: dq
+  project: poc
+  data_owner: levi.gagne@claconnect.com
+  classification: internal
+
+owner: levi.gagne@claconnect.com   # Required. Data owner or product owner.
+
+properties:
+  comment: |
+    **Table:** dq_dev.lmg_sandbox.config_driven_table_example
+
+    **Governance**
+    - YAML is the source of truth; changes in UI are not tracked.
+    - Required: catalog, schema, table, at least one column with name/datatype.
+    - Use partitioned_by for scalability if needed.
+
+    **Evolution**
+    - Adding columns to the end is supported.
+    - Renaming columns (by position/type) is supported.
+    - Data type changes or column drops require matching positions.
+    - Foreign keys here are not enforced—reference only.
+
+  table_properties:
+    delta.columnMapping.mode: "name"
+    delta.minReaderVersion: "2"
+    delta.minWriterVersion: "5"
+
+# ---- COLUMNS SECTION ----
+columns:
+  # COLUMN 1: Maximal — all options, all fields, fully annotated
+  1:
+    name: example_id                    # Required. Column name.
+    datatype: string                    # Required. Spark/Delta type.
+    nullable: false                     # Optional (default true)
+    comment: "Primary key: unique row id for this table."
+    tags:
+      pii: false
+      business_key: yes
+      sensitive: true
+    column_masking_rule: ""
+    default_value: null                        # Optional.
+    variable_value: "special_code_string"      # Optional.
+    allowed_values: ["A", "B", "C"]            # Optional. List of valid values for UI/validation.
+    column_check_constraints: {}
+    active: true                        # If False, column is ignored/dropped in loads.
+
+  # COLUMN 2: Minimal — only the bare minimum required
+  2:
+    name: minimal_col
+    datatype: string
+    nullable: true
+    active: true
+
+  # COLUMN 3: Generic, all options present but mostly blank for illustration
+  3:
+    name: column_1
+    datatype: string
+    nullable: true
+    comment: ""
+    tags: {}
+    column_masking_rule: ""
+    default_value: "default"
+    variable_value: 42
+    allowed_values: []
+    column_check_constraints: {}
+    active: true
+
+  # COLUMN 4: All fields, another variety
+  4:
+    name: column_2
+    datatype: int
+    nullable: false
+    comment: "Integer value for sample calculations."
+    tags:
+      business_key: no
+    column_masking_rule: ""
+    default_value: 0
+    variable_value: null
+    allowed_values: []
+    column_check_constraints: {}
+    active: true
+
+  5:
+    name: column_3
+    datatype: double
+    nullable: true
+    comment: "Numeric column for analytic tests."
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: 3.14159
+    allowed_values: []
+    active: true
+
+  6:
+    name: event_date
+    datatype: date
+    nullable: false
+    comment: "Event date for partitioning."
+    tags:
+      partition_key: true
+    column_masking_rule: ""
+    default_value: null
+    variable_value: "date_api_code"
+    allowed_values: []
+    active: true
+
+  7:
+    name: email
+    datatype: string
+    nullable: false
+    comment: "User email address. Unique constraint applied."
+    tags:
+      pii: true
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+
+  8:
+    name: user_id
+    datatype: string
+    nullable: false
+    comment: "Alternate user id for composite unique constraint."
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+
+  9:
+    name: group_id
+    datatype: string
+    nullable: false
+    comment: "Group id for composite unique constraint."
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+
+  10:
+    name: created_at
+    datatype: timestamp
+    nullable: false
+    comment: "Timestamp when row was created."
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+
+  11:
+    name: created_by
+    datatype: string
+    nullable: false
+    comment: "System or user that created this row."
+    tags:
+      audit: true
+    column_masking_rule: ""
+    default_value: "admin_user"
+    variable_value: null
+    allowed_values: []
+    active: true
+
+  12:
+    name: updated_at
+    datatype: timestamp
+    nullable: true
+    comment: "Timestamp for the most recent update to this row."
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true
+
+  13:
+    name: updated_by
+    datatype: string
+    nullable: true
+    comment: "System or user that last updated this row."
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    active: true

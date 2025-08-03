@@ -1,9 +1,9 @@
-# src/layker/yaml.py
+# src/layker/snapshot_yaml.py
 
 import yaml
 from typing import Any, Dict, List, Optional
 
-class TableSchemaConfig:
+class YamlSnapshot:
     """
     Loader for YAML DDL config files. Exposes all config blocks with a clean API.
     Handles dynamic env, catalog suffixes, and nested constraints/keys.
