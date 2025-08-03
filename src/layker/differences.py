@@ -1,9 +1,89 @@
-# src/layker/steps/differences.py
-
 """
 Module: differences.py
-Purpose: Compare two metadata snapshots (from table and YAML) and return a canonical differences dictionary
+Purpose: Compare two metadata snapshots (from table and YAML) and return a canonical differences dictionary.
 Author: Levi Gagne / Laker
+
+Below is the full diff template (for reference only, not used at runtime).
+Developers: This shows the *full set* of supported diff keys at each level for add, update, remove.
+Copy/paste for onboarding, debugging, or updating. Do not return this entire structure in actual code output.
+"""
+
+# === CANONICAL DIFF TEMPLATE ===
+"""
+DIFF_TEMPLATE = {
+    "full_table_name": "",
+    "add": {
+        "primary_key": [],
+        "partitioned_by": [],
+        "unique_keys": [],
+        "foreign_keys": {},
+        "table_check_constraints": {
+            "constraint_1": {"name": "", "expression": ""},
+        },
+        "row_filters": {
+            "row_filter_1": {"name": "", "expression": ""}
+        },
+        "table_tags": {"tag_1": ""},
+        "owner": "",
+        "table_comment": "",
+        "table_properties": {"property_1": ""},
+        "columns": {
+            1: {
+                "name": "",
+                "datatype": "",
+                "nullable": True,
+                "column_comment": "",
+                "column_tags": {"tag_1": ""},
+                "column_masking_rule": "",
+                "column_check_constraints": {
+                    "check_1": {"name": "", "expression": ""}
+                }
+            }
+        }
+    },
+    "update": {
+        "primary_key": [],
+        "table_check_constraints": {
+            "constraint_1": {"name": "", "expression": ""},
+        },
+        "row_filters": {
+            "row_filter_1": {"name": "", "expression": ""}
+        },
+        "table_tags": {"tag_1": ""},
+        "owner": "",
+        "table_comment": "",
+        "table_properties": {"property_1": ""},
+        "columns": {
+            1: {
+                "name": "",
+                "column_comment": "",
+                "column_tags": {"tag_1": ""},
+                "column_masking_rule": "",
+                "column_check_constraints": {
+                    "check_1": {"name": "", "expression": ""}
+                }
+            }
+        }
+    },
+    "remove": {
+        "table_check_constraints": {
+            "constraint_1": {"name": "", "expression": ""},
+        },
+        "row_filters": {
+            "row_filter_1": {"name": "", "expression": ""}
+        },
+        "table_tags": {"tag_1": ""},
+        "columns": {
+            1: {
+                "name": "",
+                "column_tags": {"tag_1": ""},
+                "column_check_constraints": {
+                    "check_1": {"name": "", "expression": ""}
+                }
+            }
+        }
+    }
+}
 """
 
 from typing import Dict, Any
@@ -12,6 +92,7 @@ def generate_differences(yaml_snapshot: Dict[str, Any], table_snapshot: Dict[str
     """
     Compute differences between YAML snapshot and table snapshot,
     returning a canonical dictionary structure for use by the loader.
+    Output will be a *subset* of the above template, including only non-empty changes.
     """
     diffs = {
         "full_table_name": yaml_snapshot.get("full_table_name", ""),
@@ -20,114 +101,29 @@ def generate_differences(yaml_snapshot: Dict[str, Any], table_snapshot: Dict[str
             "partitioned_by": [],
             "unique_keys": [],
             "foreign_keys": {},
-            "table_check_constraints": {
-                "constraint_1": {  # Example key
-                    "name": "",
-                    "expression": "",
-                },
-            },
-            "row_filters": {
-                "row_filter_1": {
-                    "name": "",
-                    "expression": "",
-                }
-            },
-            "table_tags": {
-                "tag_1": ""
-            },
+            "table_check_constraints": {},
+            "row_filters": {},
+            "table_tags": {},
             "owner": "",
             "table_comment": "",
-            "table_properties": {
-                "property_1": ""
-            },
-            "columns": {
-                1: {
-                    "name": "",
-                    "datatype": "",
-                    "nullable": True,
-                    "column_comment": "",
-                    "column_tags": {
-                        "tag_1": ""
-                    },
-                    "column_masking_rule": "",
-                    "column_check_constraints": {
-                        "check_1": {
-                            "name": "",
-                            "expression": ""
-                        }
-                    }
-                }
-            }
+            "table_properties": {},
+            "columns": {},
         },
         "update": {
             "primary_key": [],
-            "table_check_constraints": {
-                "constraint_1": {
-                    "name": "",
-                    "expression": "",
-                },
-            },
-            "row_filters": {
-                "row_filter_1": {
-                    "name": "",
-                    "expression": "",
-                }
-            },
-            "table_tags": {
-                "tag_1": ""
-            },
+            "table_check_constraints": {},
+            "row_filters": {},
+            "table_tags": {},
             "owner": "",
             "table_comment": "",
-            "table_properties": {
-                "property_1": ""
-            },
-            "columns": {
-                1: {
-                    "name": "",
-                    "column_comment": "",
-                    "column_tags": {
-                        "tag_1": ""
-                    },
-                    "column_masking_rule": "",
-                    "column_check_constraints": {
-                        "check_1": {
-                            "name": "",
-                            "expression": ""
-                        }
-                    }
-                }
-            }
+            "table_properties": {},
+            "columns": {},
         },
         "remove": {
-            "table_check_constraints": {
-                "constraint_1": {
-                    "name": "",
-                    "expression": "",
-                },
-            },
-            "row_filters": {
-                "row_filter_1": {
-                    "name": "",
-                    "expression": "",
-                }
-            },
-            "table_tags": {
-                "tag_1": ""
-            },
-            "columns": {
-                1: {
-                    "name": "",
-                    "column_tags": {
-                        "tag_1": ""
-                    },
-                    "column_check_constraints": {
-                        "check_1": {
-                            "name": "",
-                            "expression": ""
-                        }
-                    }
-                }
-            }
+            "table_check_constraints": {},
+            "row_filters": {},
+            "table_tags": {},
+            "columns": {},
         }
     }
 
@@ -220,7 +216,7 @@ def generate_differences(yaml_snapshot: Dict[str, Any], table_snapshot: Dict[str
                 "column_comment": y_col.get("comment", ""),
                 "column_tags": y_col.get("tags", {}),
                 "column_masking_rule": y_col.get("column_masking_rule", ""),
-                "column_check_constraints": y_col.get("column_check_constraints", {})
+                "column_check_constraints": y_col.get("column_check_constraints", {}),
             }
             continue
 
