@@ -1,6 +1,18 @@
-# src/layker/differences.py
+# src/layker/steps/differences.py
 
-def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
+"""
+Module: differences.py
+Purpose: Compare two metadata snapshots (from table and YAML) and return a canonical differences dictionary
+Author: Levi Gagne / Laker
+"""
+
+from typing import Dict, Any
+
+def generate_differences(yaml_snapshot: Dict[str, Any], table_snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Compute differences between YAML snapshot and table snapshot,
+    returning a canonical dictionary structure for use by the loader.
+    """
     diffs = {
         "full_table_name": yaml_snapshot.get("full_table_name", ""),
         "add": {
@@ -120,8 +132,6 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
     }
 
     # --- TABLE-LEVEL DIFFS ---
-
-    # Primary Key
     y_pk = yaml_snapshot.get("primary_key", [])
     t_pk = table_snapshot.get("primary_key", [])
     if y_pk and y_pk != t_pk:
@@ -130,21 +140,16 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
         else:
             diffs["update"]["primary_key"] = y_pk
 
-    # Partitioned by (creation only; skip in diffs)
-
-    # Unique Keys
     y_uk = yaml_snapshot.get("unique_keys", [])
     t_uk = table_snapshot.get("unique_keys", [])
     if y_uk and y_uk != t_uk:
         diffs["add"]["unique_keys"] = y_uk
 
-    # Foreign Keys
     y_fk = yaml_snapshot.get("foreign_keys", {})
     t_fk = table_snapshot.get("foreign_keys", {})
     if y_fk and y_fk != t_fk:
         diffs["add"]["foreign_keys"] = y_fk
 
-    # Table Check Constraints
     y_tcc = yaml_snapshot.get("table_check_constraints", {})
     t_tcc = table_snapshot.get("table_check_constraints", {})
     for k, v in y_tcc.items():
@@ -156,7 +161,6 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
         if k not in y_tcc:
             diffs["remove"]["table_check_constraints"][k] = v
 
-    # Row Filters
     y_rf = yaml_snapshot.get("row_filters", {})
     t_rf = table_snapshot.get("row_filters", {})
     for k, v in y_rf.items():
@@ -168,7 +172,6 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
         if k not in y_rf:
             diffs["remove"]["row_filters"][k] = v
 
-    # Table Tags
     y_tags = yaml_snapshot.get("tags", {})
     t_tags = table_snapshot.get("tags", {})
     for k, v in y_tags.items():
@@ -181,19 +184,16 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
         if k not in y_tags:
             diffs["remove"]["table_tags"][k] = v
 
-    # Owner
     y_owner = yaml_snapshot.get("owner", "")
     t_owner = table_snapshot.get("owner", "")
     if y_owner != t_owner:
         diffs["update"]["owner"] = y_owner
 
-    # Table Comment
     y_comment = yaml_snapshot.get("comment", "")
     t_comment = table_snapshot.get("comment", "")
     if y_comment != t_comment:
         diffs["update"]["table_comment"] = y_comment
 
-    # Table Properties (add new, update changed, never remove)
     y_props = yaml_snapshot.get("table_properties", {})
     t_props = table_snapshot.get("table_properties", {})
     for k, v in y_props.items():
@@ -205,7 +205,7 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
     # --- COLUMN-LEVEL DIFFS ---
     y_cols = yaml_snapshot.get("columns", {})
     t_cols = table_snapshot.get("columns", {})
-    max_idx = max(len(y_cols), len(t_cols), 1)  # always at least one
+    max_idx = max(len(y_cols), len(t_cols), 1)
 
     for idx in range(1, max_idx + 1):
         y_col = y_cols.get(idx)
@@ -244,7 +244,6 @@ def generate_differences(yaml_snapshot: dict, table_snapshot: dict) -> dict:
                 col_update["column_tags"] = y_col.get("tags", {})
             if y_col.get("column_masking_rule", "") != t_col.get("column_masking_rule", ""):
                 col_update["column_masking_rule"] = y_col.get("column_masking_rule", "")
-            # Check constraints (add/update/remove)
             y_checks = y_col.get("column_check_constraints", {})
             t_checks = t_col.get("column_check_constraints", {})
             checks_update = {}
