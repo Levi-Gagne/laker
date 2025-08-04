@@ -1,6 +1,5 @@
 # src/layker/differences.py
 
-
 # === CANONICAL DIFF TEMPLATE ===
 """
 DIFF_TEMPLATE = {

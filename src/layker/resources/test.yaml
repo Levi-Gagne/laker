@@ -4,7 +4,7 @@
 
 catalog: dq_dev      # Required. If ends with '_', will append env (e.g., dq_dev_{env}). If not, used as is.
 schema: lmg_sandbox  # Required. Schema name in catalog.
-table: config_driven_table_example   # Required. Table name.
+table: tst   # Required. Table name.
 
 primary_key: [example_id]     # Required for DDL. Must match at least one column below.
 partitioned_by: [event_date]  # Optional; for large/time-based tables.
