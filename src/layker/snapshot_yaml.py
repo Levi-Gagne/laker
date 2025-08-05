@@ -1,17 +1,67 @@
 # src/layker/snapshot_yaml.py
 
+"""
+YAML TABLE VALIDATION & SNAPSHOT
+-------------------------------------------------------------------------------
+This file validates and sanitizes YAML table DDL for Databricks/Delta Lake.
+Validation covers all of the following rules:
+
+TABLE-LEVEL VALIDATION CHECKS
+-------------------------------------------------------------------------------
+- Required top-level keys: catalog, schema, table, columns, properties
+- catalog/schema/table: must be valid SQL identifiers ([a-z][a-z0-9_]*)
+- At least one column must be defined under columns
+- Column keys must be continuous (1,2,...N)
+- Each column must include: name, datatype, nullable, active
+- No duplicate column names allowed
+- Column names must be valid SQL identifiers
+- datatype must be supported Spark type (or valid complex type)
+- active must be boolean
+- If default_value present:
+    - Must match expected type for that datatype
+    - Boolean must be bool or string "true"/"false"
+- Column comments cannot contain newline, carriage return, tab, or single quote
+
+COLUMN CHECK CONSTRAINTS
+-------------------------------------------------------------------------------
+- If present, must be a dict
+- Each constraint must be a dict with both name and expression
+- No duplicate constraint names per column
+
+SCHEMA-LEVEL REFERENCES
+-------------------------------------------------------------------------------
+- primary_key, partitioned_by: must reference only existing columns
+- unique_keys: must be a list of lists, each referencing valid columns
+- foreign_keys:
+    - Must be a dict
+    - Each FK must have: columns, reference_table, reference_columns
+    - columns must exist
+    - reference_table must be fully qualified (catalog.schema.table)
+    - reference_columns must be list of strings
+
+TABLE-LEVEL FEATURES
+-------------------------------------------------------------------------------
+- table_check_constraints: dict, each with name and expression, no duplicates
+- row_filters: dict, each with name and expression, no duplicates
+- tags: must be a dict (if present)
+- owner: must be string or null (if present)
+
+"""
+import re
 import sys
 import yaml
-import re
 from typing import Any, Dict, List, Tuple, Optional
+
+from layker.utils.color import Color
 
 # ---- VALIDATOR ----
 
-class TableYamlValidator:
-    REQUIRED_TOP_KEYS = ["catalog", "schema", "table", "columns", "properties"]
+class YamlSnapshot:
+    REQUIRED_TOP_KEYS = ["catalog", "schema", "table", "columns"]
     OPTIONAL_TOP_KEYS = [
         "primary_key", "partitioned_by", "unique_keys", "foreign_keys",
-        "table_check_constraints", "row_filters", "tags", "owner"
+        "table_check_constraints", "row_filters", "tags", "owner",
+        "table_comment", "table_properties"
     ]
 
     REQUIRED_COL_KEYS = {"name", "datatype", "nullable", "active"}
@@ -54,13 +104,21 @@ class TableYamlValidator:
             if key not in cfg or cfg[key] in (None, ""):
                 errors.append(f"Missing top-level key: '{key}'")
 
-        # 2. Table/catalog/schema identifier validity
+        # 2. Check that 'table_comment' and 'table_properties' are *not* under 'properties'
+        if "properties" in cfg:
+            if isinstance(cfg["properties"], dict):
+                if "comment" in cfg["properties"]:
+                    errors.append("Move 'comment' out of 'properties' and use top-level 'table_comment'")
+                if "table_properties" in cfg["properties"]:
+                    errors.append("Move 'table_properties' out of 'properties' and use top-level 'table_properties'")
+
+        # 3. Table/catalog/schema identifier validity
         for k in ("catalog", "schema", "table"):
             v = cfg.get(k, "")
             if v and not cls._is_valid_sql_identifier(v.replace("_", "a").replace(".", "a")):
                 errors.append(f"Invalid {k} name: '{v}'")
 
-        # 3. Columns 1..N
+        # 4. Columns 1..N
         raw = cfg.get("columns", {})
         if not raw:
             errors.append("No columns defined. At least one column is required.")
@@ -207,6 +265,12 @@ class TableYamlValidator:
             errors.append("Top-level 'tags' must be a dict")
         if "owner" in cfg and not (cfg["owner"] is None or isinstance(cfg["owner"], str)):
             errors.append("'owner' must be a string or null")
+        # Enforce table_comment is string or missing
+        if "table_comment" in cfg and not isinstance(cfg["table_comment"], str):
+            errors.append("'table_comment' must be a string")
+        # Enforce table_properties is dict or missing
+        if "table_properties" in cfg and not isinstance(cfg["table_properties"], dict):
+            errors.append("'table_properties' must be a dict")
         return (len(errors) == 0, errors)
 
 # ---- SANITIZER ----
@@ -231,14 +295,15 @@ def recursive_sanitize_comments(obj: Any, path: str = "") -> Any:
     return obj
 
 def sanitize_metadata(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    props = cfg.setdefault("properties", {})
-    if "comment" in props:
-        raw = props["comment"] or ""
-        lines = str(raw).splitlines()
-        props["comment"] = "\n".join(line.strip() for line in lines)
-    tbl_props = props.setdefault("table_properties", {})
-    for k in list(tbl_props):
-        tbl_props[k] = sanitize_text(tbl_props[k])
+    # Table comment: strip lines but preserve newlines
+    if "table_comment" in cfg and isinstance(cfg["table_comment"], str):
+        lines = str(cfg["table_comment"]).splitlines()
+        cfg["table_comment"] = "\n".join(line.strip() for line in lines)
+    # Table properties
+    if "table_properties" in cfg and isinstance(cfg["table_properties"], dict):
+        for k in list(cfg["table_properties"]):
+            cfg["table_properties"][k] = sanitize_text(cfg["table_properties"][k])
+    # Tags
     tags = cfg.setdefault("tags", {})
     for k in list(tags):
         tags[k] = sanitize_text(tags[k])
@@ -271,8 +336,8 @@ def build_snapshot_yaml(cfg: Dict[str, Any], env: Optional[str] = None) -> Tuple
     fq = f"{_get_catalog()}.{_get_schema()}.{_get_table()}"
 
     def _get_tags(): return cfg.get("tags", {})
-    def _get_props(): return cfg.get("properties", {})
-    def _get_comment(): return _get_props().get("comment", "")
+    def _get_comment(): return cfg.get("table_comment", "")
+    def _get_props(): return cfg.get("table_properties", {})
 
     def _get_columns_dict():
         cols_dict = cfg.get("columns", {})
@@ -305,8 +370,8 @@ def build_snapshot_yaml(cfg: Dict[str, Any], env: Optional[str] = None) -> Tuple
         "table_tags": _get_tags(),
         "row_filters": cfg.get("row_filters", {}),
         "table_check_constraints": cfg.get("table_check_constraints", {}),
-        "table_properties": _get_props().get("table_properties", {}),
-        "comment": _get_comment(),
+        "table_properties": _get_props(),
+        "table_comment": _get_comment(),
         "owner": cfg.get("owner", ""),
         "columns": _get_columns_dict(),
     }
@@ -330,20 +395,25 @@ def validate_and_snapshot_yaml(yaml_path: str, env: Optional[str] = None, mode: 
         sys.exit(2)
 
     # 2. Validate
-    valid, errors = TableYamlValidator.validate_dict(raw_cfg)
+    valid, errors = YamlSnapshot.validate_dict(raw_cfg)
     if not valid:
         print("Validation failed:")
         for err in errors:
             print(f"  - {err}")
+        print(f"{Color.b}{Color.vibrant_red}YAML validation failed. See errors above.{Color.r}")
         sys.exit(1)
+    else:
+        print(f"{Color.b}{Color.green}YAML validation passed.{Color.r}")
+
     # 3. Sanitize
     cfg_clean = recursive_sanitize_comments(raw_cfg)
     cfg_clean = sanitize_metadata(cfg_clean)
 
     if mode == "validate":
-        print("YAML validation passed.")
+        print("Validation complete. Exiting after successful validation.")
         sys.exit(0)
 
     # 4. Build snapshot
     snapshot_yaml, fq_table = build_snapshot_yaml(cfg_clean, env=env)
+    print("Snapshot YAML and fully qualified table name are ready.")
     return snapshot_yaml, fq_table

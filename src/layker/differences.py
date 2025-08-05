@@ -227,6 +227,11 @@ def diff_table_properties(yaml: Dict[str, Any], table: Optional[Dict[str, Any]],
 def diff_columns(yaml: Dict[str, Any], table: Optional[Dict[str, Any]], add, update, remove):
     y_cols = yaml.get("columns", {}) or {}
     t_cols = table.get("columns", {}) if table else {}
+
+    # FIX: ensure keys are ints!
+    y_cols = {int(k): v for k, v in y_cols.items()}
+    t_cols = {int(k): v for k, v in t_cols.items()}
+
     y_idxs, t_idxs = set(y_cols.keys()), set(t_cols.keys())
 
     # Add new columns at the end

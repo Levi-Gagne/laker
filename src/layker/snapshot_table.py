@@ -4,6 +4,9 @@ import re
 from typing import Any, Dict, List, Optional
 from pyspark.sql import SparkSession
 
+from layker.utils.color import Color
+from layker.utils.table import table_exists
+
 class TableSnapshot:
     SNAPSHOT_QUERIES = {
         "table_tags": {
@@ -43,6 +46,8 @@ class TableSnapshot:
         if len(parts) != 3:
             raise ValueError("Expected format: catalog.schema.table")
         return parts[0], parts[1], parts[2]
+
+    # Removed the old _table_exists method.
 
     def _build_metadata_sql(self, kind: str) -> str:
         config = self.SNAPSHOT_QUERIES[kind]
@@ -88,20 +93,18 @@ class TableSnapshot:
         return columns
 
     def _extract_partitioned_by(self, describe_rows: List[Dict[str, Any]]) -> List[str]:
-        # More robust: handle extra headers, blank lines, and section switches.
         collecting = False
         partition_cols = []
         for row in describe_rows:
             col_name = (row.get("col_name") or "").strip()
-            # Start block
             if col_name == "# Partition Information":
                 collecting = True
                 continue
             if collecting:
                 if col_name.startswith("#") and col_name != "# col_name":
-                    break  # new section begins
+                    break
                 if col_name == "" or col_name == "# col_name":
-                    continue  # skip headers/empties
+                    continue
                 partition_cols.append(col_name)
         return partition_cols
 
@@ -168,7 +171,10 @@ class TableSnapshot:
     def _get_unique_keys(self, uc_metadata: Dict[str, List[Dict[str, Any]]]) -> List[List[str]]:
         return []
 
-    def build_table_metadata_dict(self) -> Dict[str, Any]:
+    def build_table_metadata_dict(self) -> Optional[Dict[str, Any]]:
+        if not table_exists(self.spark, self.fq_table):
+            print(f"{Color.b}{C.ivory}Target table '{C.r}{Color.b}{C.sky_blue}{fq_table}{Color.r}{Color.b}{C.ivory}' doesn't exist; returning '{C.r}{Color.b}{C.blush_pink}None{Color.r}{Color.b}{C.ivory}' to differences for snapshot_table{Color.r}")
+            return None
         uc_metadata = self._get_metadata_snapshot()
         describe_rows = self._get_describe_rows()
 
@@ -191,7 +197,6 @@ class TableSnapshot:
                     "expression": row.get("target_columns", "")
                 }
 
-        # Partition columns (fixed logic)
         partitioned_by = self._extract_partitioned_by(describe_rows)
 
         constraints = self._extract_constraints(describe_rows)

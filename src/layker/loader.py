@@ -1,313 +1,353 @@
 # src/layker/loader.py
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict
 from pyspark.sql import SparkSession
+
+# ---- Centralized Loader Config ----
+LOADER_CONFIG = {
+    "add": {
+        "primary_key": {
+            "sql": "ALTER TABLE {fq} ADD PRIMARY KEY ({cols})",
+            "desc": "ADD primary key: {cols}"
+        },
+        "partitioned_by": {
+            "sql": "ALTER TABLE {fq} ADD PARTITIONED BY ({cols})",
+            "desc": "ADD partition: {cols}"
+        },
+        "unique_keys": {
+            "sql": "ALTER TABLE {fq} ADD CONSTRAINT uq_{key} UNIQUE ({cols})",
+            "desc": "ADD unique key: {cols}"
+        },
+        "foreign_keys": {
+            "sql": (
+                "ALTER TABLE {fq} ADD CONSTRAINT {name} "
+                "FOREIGN KEY ({cols}) REFERENCES {ref_tbl} ({ref_cols})"
+            ),
+            "desc": "ADD foreign key: {name} ({cols})"
+        },
+        "table_check_constraints": {
+            "sql": "ALTER TABLE {fq} ADD CONSTRAINT {name} CHECK ({expression})",
+            "desc": "ADD table check constraint: {name}"
+        },
+        "row_filters": {
+            "sql": "ALTER TABLE {fq} ADD ROW FILTER {name} WHERE {expression}",
+            "desc": "ADD row filter: {name}"
+        },
+        "table_tags": {
+            "sql": "ALTER TABLE {fq} SET TAGS ('{key}' = '{val}')",
+            "desc": "ADD table tag: {key}={val}"
+        },
+        "owner": {
+            "sql": "ALTER TABLE {fq} OWNER TO `{owner}`",
+            "desc": "SET owner: {owner}"
+        },
+        "table_comment": {
+            "sql": "ALTER TABLE {fq} SET COMMENT '{comment}'",
+            "desc": "SET table comment"
+        },
+        "table_properties": {
+            "sql": "ALTER TABLE {fq} SET TBLPROPERTIES ('{key}' = '{val}')",
+            "desc": "ADD table property: {key}={val}"
+        },
+        "columns": {
+            "sql": None  # Handled separately or via create
+        }
+    },
+    "update": {
+        "primary_key": {
+            "sql": "ALTER TABLE {fq} ALTER PRIMARY KEY ({cols})",
+            "desc": "UPDATE primary key: {cols}"
+        },
+        "table_check_constraints": {
+            "sql": "ALTER TABLE {fq} ALTER CONSTRAINT {name} CHECK ({expression})",
+            "desc": "UPDATE table check constraint: {name}"
+        },
+        "row_filters": {
+            "sql": "ALTER TABLE {fq} ALTER ROW FILTER {name} WHERE {expression}",
+            "desc": "UPDATE row filter: {name}"
+        },
+        "table_tags": {
+            "sql": "ALTER TABLE {fq} SET TAGS ('{key}' = '{val}')",
+            "desc": "UPDATE table tag: {key}={val}"
+        },
+        "owner": {
+            "sql": "ALTER TABLE {fq} OWNER TO `{owner}`",
+            "desc": "UPDATE owner: {owner}"
+        },
+        "table_comment": {
+            "sql": "ALTER TABLE {fq} SET COMMENT '{comment}'",
+            "desc": "UPDATE table comment"
+        },
+        "table_properties": {
+            "sql": "ALTER TABLE {fq} SET TBLPROPERTIES ('{key}' = '{val}')",
+            "desc": "UPDATE table property: {key}={val}"
+        },
+        "columns": {
+            "sql": None  # Handled separately
+        }
+    },
+    "remove": {
+        "table_check_constraints": {
+            "sql": "ALTER TABLE {fq} DROP CONSTRAINT {name}",
+            "desc": "REMOVE table check constraint: {name}"
+        },
+        "row_filters": {
+            "sql": "ALTER TABLE {fq} DROP ROW FILTER {name}",
+            "desc": "REMOVE row filter: {name}"
+        },
+        "table_tags": {
+            "sql": "ALTER TABLE {fq} UNSET TAGS ('{key}')",
+            "desc": "REMOVE table tag: {key}"
+        },
+        "columns": {
+            "sql": None  # Handled separately
+        }
+    }
+}
+
 
 class DatabricksTableLoader:
     """
-    Accepts sanitized & validated YAML config, sanitized table snapshot, and a SparkSession.
-    Handles CREATE or ALTER TABLE operations only (no diffing or introspection).
+    Loads, updates, or removes table metadata using a differences dictionary.
+    Handles CREATE TABLE if the add block implies creation.
+    Applies column comments and tags after CREATE for all columns.
     """
-
-    def __init__(
-        self,
-        cfg: Dict[str, Any],
-        spark: SparkSession,
-        dry_run: bool = False,
-        clean_snap: Dict[str, Any] = None,
-    ):
-        self.cfg = cfg
+    def __init__(self, diff_dict: Dict[str, Any], spark: SparkSession, dry_run: bool = False):
+        self.diff = diff_dict
         self.spark = spark
         self.dry_run = dry_run
-        self.clean_snap = clean_snap  # sanitized snapshot dict, or None for create
-        self._modifications: List[str] = []
-        self._modifications_applied: bool = False
+        self.fq = diff_dict["full_table_name"]
+        self.log = []
 
-    @staticmethod
-    def escape_sql(text: Any) -> str:
-        return str(text).replace("'", "''")
+    def run(self):
+        add = self.diff.get("add", {})
+        update = self.diff.get("update", {})
+        remove = self.diff.get("remove", {})
+        columns = add.get("columns", {})
 
-    def _run_or_log(self, sql: str) -> None:
+        # --- CREATE TABLE path ---
+        if columns and str(min(map(int, columns.keys()))) == "1" and not update and not remove:
+            self._create_table(add)
+            print("[SUMMARY] Table CREATE complete:")
+            for entry in self.log:
+                print(f"  - {entry}")
+            return
+
+        # --- ALTER TABLE path ---
+        for action in ["add", "update", "remove"]:
+            section = self.diff.get(action, {})
+            if section:
+                self._handle_section(action, section)
+        print("[SUMMARY] Table modifications complete:")
+        for entry in self.log:
+            print(f"  - {entry}")
+
+    def _create_table(self, add_section):
+        cols = add_section["columns"]
+        col_sqls = []
+        for idx in sorted(cols, key=lambda x: int(x)):
+            col = cols[idx]
+            name = col["name"]
+            datatype = col["datatype"]
+            nullable = col.get("nullable", True)
+            col_sql = f"`{name}` {datatype}{' NOT NULL' if not nullable else ''}"
+            col_sqls.append(col_sql)
+        columns_sql = ",\n  ".join(col_sqls)
+
+        # Partitioning
+        partitioned_by = add_section.get("partitioned_by", [])
+        partition_sql = f"\nPARTITIONED BY ({', '.join(partitioned_by)})" if partitioned_by else ""
+
+        # Properties
+        tbl_props = add_section.get("table_properties", {})
+        tbl_props_sql = ""
+        if tbl_props:
+            props = [f"'{k}' = '{v}'" for k, v in tbl_props.items()]
+            tbl_props_sql = f"\nTBLPROPERTIES ({', '.join(props)})"
+
+        # Table comment
+        tbl_comment = add_section.get("table_comment", "")
+        tbl_comment_sql = f"\nCOMMENT '{tbl_comment}'" if tbl_comment else ""
+
+        sql = f"CREATE TABLE {self.fq} (\n  {columns_sql}\n){partition_sql}{tbl_comment_sql}{tbl_props_sql}"
+
+        self._run(sql, "CREATE TABLE")
+        self.log.append(f"CREATE TABLE with columns: {list(c['name'] for c in cols.values())}")
+
+        # --- ENSURE column comments/tags are always applied post-create ---
+        self._handle_column_comments_and_tags(cols)
+
+        # Handle table tags, owner, PK, unique, FKs, checks, etc. as ALTER TABLE after creation.
+        self._handle_post_create(add_section)
+
+    def _handle_column_comments_and_tags(self, cols):
+        for idx in sorted(cols, key=lambda x: int(x)):
+            col = cols[idx]
+            name = col["name"]
+
+            # Column comment
+            comment = col.get("comment", "")
+            if comment:
+                sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} COMMENT '{comment}'"
+                self._run(sql, f"ADD comment to {name}")
+
+            # Column tags
+            tags = col.get("tags") or {}
+            for tag, value in tags.items():
+                sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} SET TAGS ('{tag}' = '{value}')"
+                self._run(sql, f"ADD tag {tag} to {name}")
+
+    def _handle_post_create(self, add_section):
+        for key, val in add_section.items():
+            if key in ("columns", "table_properties", "table_comment", "partitioned_by"):
+                continue
+            meta = LOADER_CONFIG["add"].get(key)
+            if not meta or not val:
+                continue
+            sql_template = meta.get("sql")
+            if sql_template is None:
+                continue  # Only columns handled separately, rest should all have sql
+            if key == "primary_key" or key == "partitioned_by":
+                sql = sql_template.format(fq=self.fq, cols=", ".join(val))
+                self._run(sql, meta["desc"].format(cols=", ".join(val)))
+            elif key == "unique_keys":
+                for group in val:
+                    sql = sql_template.format(fq=self.fq, key="_".join(group), cols=", ".join(group))
+                    self._run(sql, meta["desc"].format(cols=", ".join(group), key="_".join(group)))
+            elif key == "foreign_keys":
+                for fk_name, fk in val.items():
+                    sql = sql_template.format(
+                        fq=self.fq,
+                        name=fk_name,
+                        cols=", ".join(fk.get("columns", [])),
+                        ref_tbl=fk.get("reference_table", ""),
+                        ref_cols=", ".join(fk.get("reference_columns", [])),
+                    )
+                    self._run(sql, meta["desc"].format(name=fk_name, cols=", ".join(fk.get("columns", []))))
+            elif key == "table_check_constraints":
+                for cname, cdict in val.items():
+                    sql = sql_template.format(fq=self.fq, name=cname, expression=cdict.get("expression"))
+                    self._run(sql, meta["desc"].format(name=cname))
+            elif key == "row_filters":
+                for fname, fdict in val.items():
+                    sql = sql_template.format(fq=self.fq, name=fname, expression=fdict.get("expression"))
+                    self._run(sql, meta["desc"].format(name=fname))
+            elif key == "table_tags":
+                for k, v in val.items():
+                    sql = sql_template.format(fq=self.fq, key=k, val=v)
+                    self._run(sql, meta["desc"].format(key=k, val=v))
+            elif key == "owner":
+                sql = sql_template.format(fq=self.fq, owner=val)
+                self._run(sql, meta["desc"].format(owner=val))
+            # No table_comment/table_properties/columns here
+
+    def _handle_section(self, action: str, section_dict: Dict[str, Any]):
+        config = LOADER_CONFIG[action]
+        for key, meta in config.items():
+            val = section_dict.get(key)
+            if not val:
+                continue
+            sql_template = meta.get("sql")
+            if sql_template is None:
+                self._handle_columns(action, val)
+                continue
+            if key == "primary_key" or key == "partitioned_by":
+                sql = sql_template.format(fq=self.fq, cols=", ".join(val))
+                self._run(sql, meta["desc"].format(cols=", ".join(val)))
+            elif key == "unique_keys":
+                for group in val:
+                    sql = sql_template.format(fq=self.fq, key="_".join(group), cols=", ".join(group))
+                    self._run(sql, meta["desc"].format(cols=", ".join(group), key="_".join(group)))
+            elif key == "foreign_keys":
+                for fk_name, fk in val.items():
+                    sql = sql_template.format(
+                        fq=self.fq,
+                        name=fk_name,
+                        cols=", ".join(fk.get("columns", [])),
+                        ref_tbl=fk.get("reference_table", ""),
+                        ref_cols=", ".join(fk.get("reference_columns", [])),
+                    )
+                    self._run(sql, meta["desc"].format(name=fk_name, cols=", ".join(fk.get("columns", []))))
+            elif key == "table_check_constraints":
+                for cname, cdict in val.items():
+                    sql = sql_template.format(fq=self.fq, name=cname, expression=cdict.get("expression"))
+                    self._run(sql, meta["desc"].format(name=cname))
+            elif key == "row_filters":
+                for fname, fdict in val.items():
+                    sql = sql_template.format(fq=self.fq, name=fname, expression=fdict.get("expression"))
+                    self._run(sql, meta["desc"].format(name=fname))
+            elif key == "table_tags":
+                for k, v in val.items():
+                    sql = sql_template.format(fq=self.fq, key=k, val=v)
+                    self._run(sql, meta["desc"].format(key=k, val=v))
+            elif key == "table_properties":
+                for k, v in val.items():
+                    sql = sql_template.format(fq=self.fq, key=k, val=v)
+                    self._run(sql, meta["desc"].format(key=k, val=v))
+            elif key == "owner":
+                sql = sql_template.format(fq=self.fq, owner=val)
+                self._run(sql, meta["desc"].format(owner=val))
+            elif key == "table_comment":
+                sql = sql_template.format(fq=self.fq, comment=val)
+                self._run(sql, meta["desc"])
+            else:
+                sql = sql_template.format(fq=self.fq, val=val)
+                self._run(sql, f"{action.upper()} {key}: {val}")
+
+    def _handle_columns(self, action: str, columns: Dict[int, Dict[str, Any]]):
+        if action == "add":
+            for idx, col in columns.items():
+                name = col.get("name")
+                datatype = col.get("datatype")
+                if not name or not datatype:
+                    continue
+                ddl = f"`{name}` {datatype}"
+                if not col.get("nullable", True):
+                    ddl += " NOT NULL"
+                sql = f"ALTER TABLE {self.fq} ADD COLUMNS ({ddl})"
+                self._run(sql, f"ADD column {name}")
+                if col.get("comment"):
+                    sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} COMMENT '{col['comment']}'"
+                    self._run(sql, f"ADD comment to {name}")
+                for tag, value in (col.get("tags") or {}).items():
+                    sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} SET TAGS ('{tag}' = '{value}')"
+                    self._run(sql, f"ADD tag {tag} to {name}")
+                if col.get("column_masking_rule"):
+                    self.log.append(f"ADD masking rule for {name} (not supported)")
+                for cc_name, cc_def in (col.get("column_check_constraints") or {}).items():
+                    expr = cc_def.get("expression", "")
+                    self.log.append(f"ADD check constraint {cc_name} on {name}: {expr}")
+        elif action == "update":
+            for idx, col in columns.items():
+                name = col.get("name")
+                if not name:
+                    continue
+                if col.get("comment"):
+                    sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} COMMENT '{col['comment']}'"
+                    self._run(sql, f"UPDATE comment for {name}")
+                for tag, value in (col.get("tags") or {}).items():
+                    sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} SET TAGS ('{tag}' = '{value}')"
+                    self._run(sql, f"UPDATE tag {tag} for {name}")
+                if col.get("column_masking_rule"):
+                    self.log.append(f"UPDATE masking rule for {name} (not supported)")
+                for cc_name, cc_def in (col.get("column_check_constraints") or {}).items():
+                    expr = cc_def.get("expression", "")
+                    self.log.append(f"UPDATE check constraint {cc_name} on {name}: {expr}")
+        elif action == "remove":
+            for idx, col in columns.items():
+                name = col.get("name")
+                if name:
+                    sql = f"ALTER TABLE {self.fq} DROP COLUMN {name}"
+                    self._run(sql, f"REMOVE column {name}")
+                for tag in (col.get("tags") or {}):
+                    sql = f"ALTER TABLE {self.fq} ALTER COLUMN {name} UNSET TAGS ('{tag}')"
+                    self._run(sql, f"REMOVE tag {tag} from {name}")
+                for cc_name in (col.get("column_check_constraints") or {}):
+                    self.log.append(f"REMOVE check constraint {cc_name} from {name}")
+
+    def _run(self, sql, desc):
         if self.dry_run:
             print(f"[DRY RUN] {sql}")
         else:
             self.spark.sql(sql)
-
-    def _get_columns_list(self) -> List[Dict[str, Any]]:
-        raw = self.cfg["columns"]
-        norm = {str(k): v for k, v in raw.items()}
-        nums = sorted(map(int, norm.keys()))
-        return [
-            norm[str(i)]
-            for i in nums
-            if norm[str(i)].get("active", True)
-        ]
-
-    def create_or_update_table(self) -> None:
-        cat, sch, tbl = self.cfg["catalog"], self.cfg["schema"], self.cfg["table"]
-        fq = f"{cat}.{sch}.{tbl}"
-
-        if self.clean_snap is None:
-            self._create_table(fq)
-        else:
-            self._update_table(fq, self.clean_snap)
-
-        if self._modifications:
-            print("[FINAL SUMMARY] Changes applied:")
-            for m in self._modifications:
-                print(f" - {m}")
-        print(f"[SUCCESS] {fq} is now in sync with YAML.")
-
-    def _create_table(self, fq: str) -> None:
-        print(f"[INFO] Table {fq} does not exist; creating it.")
-        cols = self._get_columns_list()
-
-        # 1) Build column DDL
-        col_defs = []
-        for c in cols:
-            seg = f"`{c['name']}` {c['datatype'].lower()}"
-            if not c.get("nullable", True):
-                seg += " NOT NULL"
-            col_defs.append(seg)
-        col_ddl = ",\n  ".join(col_defs)
-
-        # 2) PK/Partition
-        pk = self.cfg.get("primary_key", [])
-        pk_ddl = f", PRIMARY KEY ({', '.join(pk)})" if pk else ""
-        part = self.cfg.get("partitioned_by", [])
-        part_ddl = f"PARTITIONED BY ({', '.join(part)})" if part else ""
-        tcomm = self.cfg["properties"].get("comment", "")
-        comm_ddl = f"COMMENT '{self.escape_sql(tcomm)}'" if tcomm else ""
-
-        # 3) Table properties
-        props = self.cfg["properties"].get("table_properties", {})
-        props_ddl = ""
-        if props:
-            kvs = ",\n  ".join(
-                f"'{self.escape_sql(k)}' = '{self.escape_sql(v)}'"
-                for k, v in props.items()
-            )
-            props_ddl = f"TBLPROPERTIES (\n  {kvs}\n)"
-
-        ddl = f"""
-        CREATE TABLE IF NOT EXISTS {fq} (
-          {col_ddl}{pk_ddl}
-        )
-        USING DELTA
-        {part_ddl}
-        {comm_ddl}
-        {props_ddl}
-        """.replace("\n        ", "\n").strip()
-
-        print("[SUMMARY] Creating new table.")
-        print(ddl)
-        self._run_or_log(ddl)
-        self._modifications.append("Table created")
-
-        # 4) Owner
-        owner = self.cfg.get("owner")
-        if owner:
-            self._run_or_log(f"ALTER TABLE {fq} OWNER TO `{self.escape_sql(owner)}`")
-            self._modifications.append("Owner set")
-
-        # 5) Refresh so Spark sees the new table immediately
-        if not self.dry_run:
-            self.spark.catalog.refreshTable(fq)
-
-        # 6) Table-level extras: properties, tags, constraints, filters, keys
-        self.apply_table_properties(fq, props)
-        self.apply_table_tags(fq, self.cfg.get("tags", {}))
-        self.apply_table_constraints(fq)
-        self.apply_table_row_filters(fq)
-        self.apply_table_unique_keys(fq)
-        self.apply_table_foreign_keys(fq)
-        self.apply_column_comments_and_tags(fq, cols)
-        self.apply_column_check_constraints(fq, cols)
-
-    def _update_table(self, fq: str, snap: Dict[str, Any]) -> None:
-        print("[INFO] Table exists; applying updates.")
-        cols = self._get_columns_list()
-
-        # Table properties diff (only applies new ones if needed)
-        desired_props = self.cfg["properties"].get("table_properties", {})
-        if desired_props and desired_props != snap["tbl_props"]:
-            print("[STEP] Applying table properties")
-            props_sql = (
-                f"ALTER TABLE {fq} SET TBLPROPERTIES (\n  "
-                + ",\n  ".join(
-                    f"'{self.escape_sql(k)}' = '{self.escape_sql(v)}'"
-                    for k, v in desired_props.items()
-                )
-                + "\n)"
-            )
-            self._run_or_log(props_sql)
-            self._modifications.append("Table properties updated")
-
-        # Table tags
-        existing_tbl_tags = snap.get("tbl_tags", {})
-        for k, v in self.cfg.get("tags", {}).items():
-            if existing_tbl_tags.get(k) != str(v):
-                print(f"[STEP] Applying table tag: {k}")
-                self._run_or_log(
-                    f"ALTER TABLE {fq} SET TAGS "
-                    f"('{self.escape_sql(k)}' = '{self.escape_sql(v)}')"
-                )
-                self._modifications.append(f"Table tag updated: {k}={v}")
-
-        # Table-level constraints, filters, keys
-        self.apply_table_constraints(fq)
-        self.apply_table_row_filters(fq)
-        self.apply_table_unique_keys(fq)
-        self.apply_table_foreign_keys(fq)
-
-        # Columns: rename / add / drop
-        yaml_names = [c["name"] for c in cols]
-        yaml_types = [c["datatype"].lower() for c in cols]
-        tbl_names, tbl_types = zip(*snap["columns"]) if snap["columns"] else ((), ())
-
-        # a) rename / in-place type checks
-        for idx, (y_name, y_type) in enumerate(zip(yaml_names, yaml_types)):
-            if idx < len(tbl_names):
-                t_name, t_type = tbl_names[idx], tbl_types[idx]
-                if y_name != t_name:
-                    print(f"[STEP] Renaming column: {t_name} → {y_name}")
-                    self._run_or_log(f"ALTER TABLE {fq} RENAME COLUMN {t_name} TO {y_name}")
-                    self._modifications.append(f"Renamed: {t_name}→{y_name}")
-
-        # b) add new
-        for y_name, y_type in zip(yaml_names[len(tbl_names):], yaml_types[len(tbl_names):]):
-            print(f"[STEP] Adding column: {y_name}")
-            self._run_or_log(f"ALTER TABLE {fq} ADD COLUMNS (`{y_name}` {y_type})")
-            self._modifications.append(f"Added column: {y_name}")
-
-        # c) drop extras
-        extras = [n for n in tbl_names if n not in yaml_names]
-        for col in extras:
-            print(f"[STEP] Dropping column: {col}")
-            self._run_or_log(f"ALTER TABLE {fq} DROP COLUMN {col}")
-            self._modifications.append(f"Dropped column: {col}")
-
-        # 5) Column comments & tags
-        existing_comments = snap.get("comments", {})
-        existing_ctags   = snap.get("col_tags", {})
-        for c in cols:
-            name = c["name"]
-            desired_comm = c.get("comment", "")
-            if desired_comm != existing_comments.get(name, ""):
-                print(f"[STEP] Applying comment for column {name}")
-                self._run_or_log(
-                    f"ALTER TABLE {fq} ALTER COLUMN {name} COMMENT '{self.escape_sql(desired_comm)}'"
-                )
-                self._modifications.append(f"Comment updated: {name}")
-
-            for tag_k, tag_v in c.get("tags", {}).items():
-                prev = existing_ctags.get(name, {}).get(tag_k)
-                if prev != str(tag_v):
-                    print(f"[STEP] Applying tag {tag_k} for column {name}")
-                    self._run_or_log(
-                        f"ALTER TABLE {fq} ALTER COLUMN {name} "
-                        f"SET TAGS ('{self.escape_sql(tag_k)}' = '{self.escape_sql(tag_v)}')"
-                    )
-                    self._modifications.append(f"Tag updated for {name}: {tag_k}={tag_v}")
-
-        # 6) Column-level check constraints
-        self.apply_column_check_constraints(fq, cols)
-
-    # ---- Helpers for all table-level metadata/features ----
-
-    def apply_table_properties(self, fq: str, table_properties: Dict[str, Any]) -> None:
-        if not table_properties:
-            return
-        props_kv = ",\n  ".join(
-            f"'{self.escape_sql(k)}' = '{self.escape_sql(v)}'"
-            for k, v in table_properties.items()
-        )
-        sql = f"ALTER TABLE {fq} SET TBLPROPERTIES (\n  {props_kv}\n)"
-        self._run_or_log(sql)
-        self._modifications.append("Table properties updated")
-
-    def apply_table_tags(self, fq: str, yaml_tags: Dict[str, Any]) -> None:
-        if not yaml_tags:
-            return
-        # All tags are applied above during update/create logic
-        pass
-
-    def apply_table_constraints(self, fq: str) -> None:
-        tcc = self.cfg.get("table_check_constraints", {})
-        for cname, cdict in tcc.items():
-            expr = cdict.get("expression")
-            if expr:
-                sql = f"ALTER TABLE {fq} ADD CONSTRAINT {cname} CHECK ({expr})"
-                print(f"[STEP] Applying table check constraint: {sql}")
-                self._run_or_log(sql)
-                self._modifications.append(f"Table check constraint applied: {cname}")
-
-    def apply_table_row_filters(self, fq: str) -> None:
-        rf = self.cfg.get("row_filters", {})
-        for fname, fdict in rf.items():
-            expr = fdict.get("expression")
-            sql = f"-- [FUTURE] ALTER TABLE {fq} ADD ROW FILTER {fname} WHERE {expr}"
-            print(f"[STEP] (skipped) Would apply row filter: {sql}")
-            self._modifications.append(f"Row filter (not applied): {fname}")
-
-    def apply_table_unique_keys(self, fq: str) -> None:
-        uk = self.cfg.get("unique_keys", [])
-        for idx, group in enumerate(uk):
-            if group:
-                name = f"uq_{'_'.join(group)}"
-                cols = ", ".join(group)
-                sql = f"-- [FUTURE] ALTER TABLE {fq} ADD CONSTRAINT {name} UNIQUE ({cols})"
-                print(f"[STEP] (skipped) Would apply unique key: {sql}")
-                self._modifications.append(f"Unique key (not applied): {name}")
-
-    def apply_table_foreign_keys(self, fq: str) -> None:
-        fks = self.cfg.get("foreign_keys", {})
-        for fk_name, fk in fks.items():
-            ref_tbl = fk.get("reference_table")
-            ref_cols = fk.get("reference_columns", [])
-            cols = fk.get("columns", [])
-            if ref_tbl and ref_cols and cols:
-                col_str = ", ".join(cols)
-                ref_col_str = ", ".join(ref_cols)
-                sql = (
-                    f"-- [FUTURE] ALTER TABLE {fq} "
-                    f"ADD CONSTRAINT {fk_name} FOREIGN KEY ({col_str}) "
-                    f"REFERENCES {ref_tbl} ({ref_col_str})"
-                )
-                print(f"[STEP] (skipped) Would apply foreign key: {sql}")
-                self._modifications.append(f"Foreign key (not applied): {fk_name}")
-
-    def apply_column_comments_and_tags(
-        self, fq: str, columns: List[Dict[str, Any]]
-    ) -> None:
-        for col in columns:
-            name = col["name"]
-            comment = col.get("comment", "")
-            if comment:
-                print(f"[STEP] Applying comment for column {name}")
-                self._run_or_log(
-                    f"ALTER TABLE {fq} ALTER COLUMN {name} "
-                    f"COMMENT '{self.escape_sql(comment)}'"
-                )
-                self._modifications.append(f"Comment set: {name}")
-
-            for tag_k, tag_v in col.get("tags", {}).items():
-                print(f"[STEP] Applying tag {tag_k} for column {name}")
-                self._run_or_log(
-                    f"ALTER TABLE {fq} ALTER COLUMN {name} "
-                    f"SET TAGS ('{self.escape_sql(tag_k)}' = '{self.escape_sql(tag_v)}')"
-                )
-                self._modifications.append(f"Tag set for {name}: {tag_k}={tag_v}")
-
-    def apply_column_check_constraints(
-        self, fq: str, columns: List[Dict[str, Any]]
-    ) -> None:
-        for col in columns:
-            name = col["name"]
-            ccc = col.get("column_check_constraints", {})
-            for cname, cdict in ccc.items():
-                expr = cdict.get("expression")
-                if expr:
-                    sql = f"-- [FUTURE] ALTER TABLE {fq} ALTER COLUMN {name} ADD CONSTRAINT {cname} CHECK ({expr})"
-                    print(f"[STEP] (skipped) Would apply column check constraint: {sql}")
-                    self._modifications.append(f"Column check constraint (not applied): {name}.{cname}")
+        self.log.append(desc)
