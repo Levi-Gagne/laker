@@ -7,7 +7,7 @@
     "foreign_keys": {},
     "unique_keys": [],
     "partitioned_by": [],
-    "tags": {},
+    "table_tags": {},
     "row_filters": {},
     "table_check_constraints": {},
     "table_properties": {},
