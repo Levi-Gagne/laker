@@ -47,8 +47,6 @@ class TableSnapshot:
             raise ValueError("Expected format: catalog.schema.table")
         return parts[0], parts[1], parts[2]
 
-    # Removed the old _table_exists method.
-
     def _build_metadata_sql(self, kind: str) -> str:
         config = self.SNAPSHOT_QUERIES[kind]
         table_vars = [self.catalog, self.schema, self.table]
@@ -164,7 +162,7 @@ class TableSnapshot:
                 "column_check_constraints": col_checks.get(name, {}),
             }
         return columns
-    
+
     def _get_foreign_keys(self, uc_metadata: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
         return {}
 
@@ -173,7 +171,7 @@ class TableSnapshot:
 
     def build_table_metadata_dict(self) -> Optional[Dict[str, Any]]:
         if not table_exists(self.spark, self.fq_table):
-            print(f"{Color.b}{C.ivory}Target table '{C.r}{Color.b}{C.sky_blue}{fq_table}{Color.r}{Color.b}{C.ivory}' doesn't exist; returning '{C.r}{Color.b}{C.blush_pink}None{Color.r}{Color.b}{C.ivory}' to differences for snapshot_table{Color.r}")
+            print(f"{Color.b}{Color.ivory}Target table '{Color.r}{Color.b}{Color.sky_blue}{self.fq_table}{Color.r}{Color.b}{Color.ivory}' doesn't exist; returning '{Color.r}{Color.b}{Color.blush_pink}None{Color.r}{Color.b}{Color.ivory}' to differences for snapshot_table{Color.r}")
             return None
         uc_metadata = self._get_metadata_snapshot()
         describe_rows = self._get_describe_rows()
@@ -215,10 +213,14 @@ class TableSnapshot:
                 col_tag_lookup[col] = {}
             col_tag_lookup[col][row["tag_name"]] = row["tag_value"]
 
+        # ---- PATCHED: exclude PK constraint from column check constraints ----
         col_constraint_lookup = {}
+        pk_constraint_name = f"{self.table}_pk"
         for row in uc_metadata.get("constraint_column_usage", []):
-            col = row["column_name"]
             cons = row["constraint_name"]
+            if cons == pk_constraint_name:
+                continue  # skip PK constraint, already handled
+            col = row["column_name"]
             if col not in col_constraint_lookup:
                 col_constraint_lookup[col] = {}
             col_constraint_lookup[col][cons] = {"name": cons}  # no expression parsing here
@@ -234,7 +236,7 @@ class TableSnapshot:
             "foreign_keys": self._get_foreign_keys(uc_metadata),
             "unique_keys": self._get_unique_keys(uc_metadata),
             "partitioned_by": partitioned_by,
-            "tags": table_tags,
+            "table_tags": table_tags,
             "row_filters": row_filters,
             "table_check_constraints": table_check_constraints,
             "table_properties": details.get("table_properties", {}),
