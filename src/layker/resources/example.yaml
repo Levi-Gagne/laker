@@ -13,11 +13,11 @@ unique_keys: []    # Optional; list of lists, each inner list = unique constrain
 
 # -- Foreign keys are not enforced in Databricks (informational only).
 #    Name each FK uniquely. Columns, reference_table, reference_columns: required, must use these keys.
-#foreign_keys:
-fk_events_date:   # Any unique string; must be unique among FKs
-  columns: [event_date]
-  reference_table: calendars.dates
-  reference_columns: [date]
+foreign_keys:
+  fk_events_date:   # Any unique string; must be unique among FKs
+    columns: [event_date]
+    reference_table: calendars.dates
+    reference_columns: [date]
   # Add additional FKs as needed.
 
 # -- Table-level CHECK constraints
