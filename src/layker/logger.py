@@ -1,5 +1,7 @@
 # src/layker/logger.py
 
+import os
+import getpass
 import uuid
 import json
 import hashlib
@@ -8,7 +10,12 @@ from typing import Any, Dict, Optional, List
 
 import yaml
 from pyspark.sql import Row, SparkSession
+
 from layker.yaml import TableSchemaConfig
+from layker.snapshot_table import TableSnapshot
+from layker.utils.table import table_exists, refresh_table
+from layker.steps.validate import validate_and_sanitize_yaml
+from layker.steps.loader import apply_loader_step
 
 
 class TableAuditLogger:
@@ -93,7 +100,6 @@ class TableAuditLogger:
         return e if e in self.ALLOWED_ENVS else "dev"
 
     def _make_change_hash(self, row_dict: Dict[str, Any]) -> str:
-        # If you ever want a deterministic id beyond UUID
         relevant = {k: row_dict.get(k) for k in self.columns if k not in {"change_id", "created_at"}}
         encoded = json.dumps(relevant, sort_keys=True, default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
@@ -106,7 +112,6 @@ class TableAuditLogger:
         before_val = self._format_snapshot(kw.get("before_value"))
         after_val = self._format_snapshot(kw.get("after_value"))
 
-        # Values we know how to populate if present in YAML
         computed: Dict[str, Any] = {
             "change_id": str(uuid.uuid4()),
             "run_id": kw.get("run_id"),
@@ -126,10 +131,7 @@ class TableAuditLogger:
             "updated_by": None,
         }
 
-        # Build ordered dict strictly per YAML-defined columns
         ordered: Dict[str, Any] = {c: computed.get(c) for c in self.columns}
-        # Any columns in YAML that we didn't explicitly compute will be None (already via dict.get)
-
         return Row(**ordered)
 
     # ------------------------
@@ -159,3 +161,59 @@ class TableAuditLogger:
         df = self.spark.createDataFrame([row])
         df.write.format("delta").mode("append").saveAsTable(self.log_table)
         print(f"[AUDIT] 1 row logged to {self.log_table}")
+
+
+# ------------------------
+# One-call audit flow (with local ensure helper)
+# ------------------------
+def audit_log_flow(
+    spark: SparkSession,
+    env: str,
+    before_snapshot: Optional[Dict[str, Any]],
+    target_table_fq: str,
+    yaml_path: Optional[str],
+    audit_table_yaml_path: str,
+    run_id: Optional[str] = None,
+    notes: Optional[str] = None,
+    snapshot_format: str = "json_pretty",
+) -> None:
+    """
+    Ensure audit table exists, refresh target table, take AFTER snapshot inline,
+    and append a single audit row. Uses BEFORE snapshot provided by caller.
+    """
+
+    def _ensure_audit_table_exists_local() -> str:
+        audit_fq = TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name
+        if not table_exists(spark, audit_fq):
+            print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
+            _ddl_cfg, cfg, _ = validate_and_sanitize_yaml(audit_table_yaml_path, env=env)
+            apply_loader_step(cfg, spark, dry_run=False, action_desc="Audit table create")
+        return audit_fq
+
+    # 1) Ensure the audit table exists (scoped to this flow)
+    _ensure_audit_table_exists_local()
+
+    # 2) Refresh target table to ensure latest metadata, then take AFTER snapshot
+    refresh_table(spark, target_table_fq)
+    after_snapshot = TableSnapshot(spark, target_table_fq).build_table_metadata_dict()
+
+    # 3) Write the audit log row (BEFORE = provided snapshot, AFTER = freshly captured)
+    actor = os.environ.get("USER") or getpass.getuser() or "AdminUser"
+    logger = TableAuditLogger(
+        spark=spark,
+        audit_yaml_path=audit_table_yaml_path,
+        env=env,
+        actor=actor,
+        snapshot_format=snapshot_format,
+    )
+    logger.log_change(
+        run_id=run_id,
+        env=env,
+        yaml_path=yaml_path,
+        fqn=target_table_fq,
+        before_value=before_snapshot,
+        after_value=after_snapshot,
+        subject_name=target_table_fq.split(".")[-1],
+        notes=notes,
+    )
+    print(f"[AUDIT] Event logged to {logger.log_table}")
