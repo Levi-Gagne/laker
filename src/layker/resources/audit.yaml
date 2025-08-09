@@ -1,4 +1,4 @@
-# src/layker/audit/audit.yaml
+# src/layker/resources/audit.yaml
 
 catalog: dq_dev
 schema: monitoring
