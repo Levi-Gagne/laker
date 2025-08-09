@@ -11,7 +11,6 @@ from layker.steps.validate import validate_and_sanitize_yaml
 from layker.snapshot_table import TableSnapshot
 from layker.yaml import TableSchemaConfig
 
-# Default path updated to the resource you pasted
 DEFAULT_AUDIT_TABLE_YAML_PATH = "src/layker/resources/audit.yaml"
 
 
@@ -35,13 +34,8 @@ def ensure_audit_table_exists(spark, env: str, audit_table_yaml_path: str) -> st
 
 
 def get_table_snapshot(spark, fq_table: str) -> Optional[Dict[str, Any]]:
-    """
-    Build a full snapshot dict from Unity Catalog for the target table.
-    Returns None if the table does not exist.
-    """
     try:
-        snap = TableSnapshot(spark, fq_table).build_table_metadata_dict()
-        return snap
+        return TableSnapshot(spark, fq_table).build_table_metadata_dict()
     except Exception as e:
         print(f"[AUDIT][ERROR] Could not get snapshot for {fq_table}: {e}")
         return None
@@ -54,11 +48,10 @@ def before_audit_log_flow(
     audit_table_yaml_path: str,
 ) -> Optional[Dict[str, Any]]:
     """
-    Ensures audit table exists, then gets BEFORE snapshot of the target table.
+    Ensures audit table exists, then returns BEFORE snapshot of the target table.
     """
     ensure_audit_table_exists(spark, env, audit_table_yaml_path)
-    before_snapshot = get_table_snapshot(spark, target_table_fq)
-    return before_snapshot
+    return get_table_snapshot(spark, target_table_fq)
 
 
 def after_audit_log_flow(
@@ -73,18 +66,17 @@ def after_audit_log_flow(
     snapshot_format: str = "json_pretty",  # "json_pretty" | "json" | "kv"
 ) -> None:
     """
-    Refreshes target table, gets AFTER snapshot, and writes one audit row.
+    Refreshes target table, takes AFTER snapshot, and appends one audit row.
+    Column order and destination table come from the audit YAML.
     """
-    # Pull latest metadata after the loader updated the table
     refresh_table(spark, target_table_fq)
     after_snapshot = get_table_snapshot(spark, target_table_fq)
 
-    audit_fq = TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name
     actor = os.environ.get("USER") or getpass.getuser() or "AdminUser"
-
     logger = TableAuditLogger(
         spark=spark,
-        log_table=audit_fq,
+        audit_yaml_path=audit_table_yaml_path,
+        env=env,
         actor=actor,
         snapshot_format=snapshot_format,
     )
@@ -99,4 +91,5 @@ def after_audit_log_flow(
         subject_name=target_table_fq.split(".")[-1],
         notes=notes,
     )
-    print(f"[AUDIT] Event logged to {audit_fq}")
+
+    print(f"[AUDIT] Event logged to {logger.log_table}")
