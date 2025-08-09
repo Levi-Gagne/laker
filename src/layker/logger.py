@@ -1,4 +1,4 @@
-# src/layker/audit/logger.py
+# src/layker/logger.py
 
 import uuid
 import json
