@@ -1,8 +1,8 @@
-# src/layker/audit/layker_audit.yaml
+# src/layker/audit/audit.yaml
 
 catalog: dq_dev
 schema: monitoring
-table: layker_audit
+table: audit
 
 primary_key: [change_id]
 partitioned_by: []
@@ -24,23 +24,23 @@ tags:
 
 owner: levi.gagne@claconnect.com
 
-properties:
-  comment: |
-    **Table:** dq_dev.monitoring.layker_audit
 
-    **Purpose:**  
-    Audit log of all schema, table, and column changes performed by automated DDL workflows and ops.  
-    Each row represents a create, update, or delete event, with before/after values for auditability.
+comment: |
+  **Table:** dq_dev.monitoring.layker_audit
 
-    **Governance and Retention:**  
-    - Table is append only  
-    - Tracks all operations; no rows are deleted  
-    - Used for compliance, rollback, and forensics
+  **Purpose:**  
+  Audit log of all schema, table, and column changes performed by automated DDL workflows and ops.  
+  Each row represents a create, update, or delete event, with before/after values for auditability.
 
-  table_properties:
-    delta.columnMapping.mode: "name"
-    delta.minReaderVersion: "2"
-    delta.minWriterVersion: "5"
+  **Governance and Retention:**  
+  - Table is append only  
+  - Tracks all operations; no rows are deleted  
+  - Used for compliance, rollback, and forensics
+
+table_properties:
+  delta.columnMapping.mode: "name"
+  delta.minReaderVersion: "2"
+  delta.minWriterVersion: "5"
 
 # ---- Columns Section ----
 columns:
