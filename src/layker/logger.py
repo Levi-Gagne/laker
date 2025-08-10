@@ -20,6 +20,29 @@ from layker.loader import DatabricksTableLoader
 from layker.utils.table import table_exists, refresh_table
 
 
+"""
+AUDIT_LOG_DOC: Dict[str, str] = {
+    "change_id": "UUID per row; primary key.",
+    "run_id": "Optional external/job run identifier.",
+    "env": "Normalized environment (prd|dev|test|qa); unknowns coerced to 'dev'.",
+    "yaml_path": "Path to the YAML that drove the change.",
+    "fqn": "Fully qualified table name (catalog.schema.table).",
+    "change_category": "Derived: 'create' iff BEFORE snapshot is None; else 'update'.",
+    "change_key": (
+        "Human sequence key per table. "
+        "CREATE: 'create-{n}'. UPDATE: 'create-{C}~update-{m}', where C is the latest create number "
+        "and m counts updates since that create. Guaranteed unique per (fqn, change_key)."
+    ),
+    "before_value": "JSON string (pretty) of pre-change metadata; NULL for create.",
+    "after_value": "JSON string (pretty) of post-change metadata.",
+    "notes": "Optional free-text context.",
+    "created_at": "UTC timestamp when the row is written.",
+    "created_by": "User/service principal writing the row.",
+    "updated_at": "Reserved for future updates; NULL by default.",
+    "updated_by": "Reserved for future updates; NULL by default.",
+}
+"""
+
 class TableAuditLogger:
     """
     Audit logger that derives:
@@ -46,7 +69,7 @@ class TableAuditLogger:
         self.actor = actor
         self.snapshot_format = snapshot_format
 
-        # Resolve audit table FQN from YAML using the new snapshot validator
+        # Resolve audit table FQN from YAML using the YAML validator/snapshotter
         audit_snapshot_yaml, audit_fq = validate_and_snapshot_yaml(
             audit_yaml_path, env=env, mode="apply"
         )
@@ -139,48 +162,91 @@ class TableAuditLogger:
     def _compute_change_key(self, fqn: str, change_category: str) -> str:
         """
         Build a human-readable sequence key per table:
-          - For CREATE:        "create-{n}"
-          - For UPDATE:        "create-{max_create}~update-{m}"
-        Counts are computed from existing rows in the audit table for this FQN.
+          - For CREATE:  'create-{n}', where n = max existing create number + 1 (for this fqn)
+          - For UPDATE:  'create-{C}~update-{m}', where
+                         C = max existing create number (>=1),
+                         m = existing updates since that C + 1
+        Guarantees uniqueness per (fqn, change_key) by probing.
         """
         try:
-            logs_df = self.spark.table(self.log_table).where(F.col("fqn") == fqn)
+            all_for_table = self.spark.table(self.log_table).where(F.col("fqn") == fqn)
         except Exception:
-            logs_df = None
+            all_for_table = None
 
-        prior_create = 0
-        prior_update = 0
-        if logs_df is not None and logs_df.head(1):
-            agg = (
-                logs_df.groupBy("change_category")
-                .agg(F.count(F.lit(1)).alias("cnt"))
+        def _max_create_num(df) -> int:
+            if df is None or not df.head(1):
+                return 0
+            row = (
+                df.where(F.col("change_category") == "create")
+                  .select(F.max(F.regexp_extract("change_key", r"create-(\d+)", 1).cast("int")).alias("c"))
+                  .collect()
+            )
+            return int(row[0]["c"] or 0) if row else 0
+
+        def _max_update_num_for_create(df, C: int) -> int:
+            if df is None or not df.head(1):
+                return 0
+            row = (
+                df.where(
+                    (F.col("change_category") == "update")
+                    & (F.col("change_key").like(f"create-{C}~update-%"))
+                )
+                .select(F.max(F.regexp_extract("change_key", r"update-(\d+)$", 1).cast("int")).alias("m"))
                 .collect()
             )
-            for row in agg:
-                if row["change_category"] == "create":
-                    prior_create = int(row["cnt"] or 0)
-                elif row["change_category"] == "update":
-                    prior_update = int(row["cnt"] or 0)
+            return int(row[0]["m"] or 0) if row else 0
+
+        def _exists_key(df, key: str) -> bool:
+            if df is None:
+                return False
+            try:
+                return df.where(F.col("change_key") == key).limit(1).count() > 0
+            except Exception:
+                # Fallback if count not available in environment
+                rows = df.where(F.col("change_key") == key).limit(1).collect()
+                return len(rows) > 0
 
         if change_category == "create":
-            create_seq = prior_create + 1
-            return f"create-{create_seq}"
-        else:
-            update_seq = prior_update + 1
-            return f"create-{prior_create}~update-{update_seq}"
+            c = _max_create_num(all_for_table) + 1
+            candidate = f"create-{c}"
+            # Probe uniqueness
+            while _exists_key(all_for_table, candidate):
+                c += 1
+                candidate = f"create-{c}"
+            return candidate
+
+        # update
+        current_c = _max_create_num(all_for_table)
+        if current_c <= 0:
+            # No prior create recorded; start at 1 for readability.
+            current_c = 1
+        m = _max_update_num_for_create(all_for_table, current_c) + 1
+        candidate = f"create-{current_c}~update-{m}"
+        # Probe uniqueness
+        while _exists_key(all_for_table, candidate):
+            m += 1
+            candidate = f"create-{current_c}~update-{m}"
+        return candidate
 
     # ------------------------
     # Row construction
     # ------------------------
     def _row(self, **kw) -> Dict[str, Any]:
         now = datetime.utcnow()
-        before_val = self._format_snapshot(kw.get("before_value"))
-        after_val = self._format_snapshot(kw.get("after_value"))
+        before_obj = kw.get("before_value")
+        after_obj = kw.get("after_value")
+
+        before_val = self._format_snapshot(before_obj)
+        after_val = self._format_snapshot(after_obj)
 
         env_norm = self._normalized_env(kw.get("env"))
         fqn = kw.get("fqn")
 
         change_category = "create" if before_val is None else "update"
+        # Sanity: CREATE rows should always have None BEFORE
+        if change_category == "create" and before_obj is not None:
+            print("[AUDIT][WARN] CREATE row but BEFORE snapshot is not None; proceeding.")
+
         change_key = self._compute_change_key(fqn=fqn, change_category=change_category)
 
         computed: Dict[str, Any] = {
@@ -266,7 +332,7 @@ def audit_log_flow(
     # 1) Ensure the audit table exists (scoped to this flow)
     _ensure_audit_table_exists_local()
 
-    # 2) Refresh target table to ensure latest metadata, then take AFTER snapshot
+    # 2) Refresh target table (no-op/skip on serverless inside refresh_table) and take AFTER snapshot
     refresh_table(spark, target_table_fq)
     after_snapshot = TableSnapshot(spark, target_table_fq).build_table_metadata_dict()
 
