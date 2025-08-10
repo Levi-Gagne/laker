@@ -1,8 +1,8 @@
-# src/layker/resources/audit.yaml
+# src/layker/resources/layker_audit.yaml
 
 catalog: dq_dev
 schema: monitoring
-table: audit
+table: layker
 
 primary_key: [change_id]
 partitioned_by: []
@@ -18,7 +18,7 @@ row_filters: {}
 
 tags:
   team: dataops
-  project: schema_monitor
+  project: layker
   data_owner: levi.gagne@claconnect.com
   classification: internal_audit
 

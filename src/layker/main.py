@@ -62,7 +62,6 @@ def run_table_load(
             print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
             sys.exit(0)
 
-        # >>> Unified differences validation (schema evolution + future checks) <<<
         validate_differences(snapshot_diff, table_snapshot)
 
         # If mode==diff, print proposed changes and exit
