@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Layker icon A">
+  <title>Layker icon — fish with two chevrons</title>
+  <g fill="none" stroke="#1862A4" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="230" cy="256" rx="170" ry="110"/>
+    <polygon points="330,256 470,190 470,322"/>
+    <circle cx="110" cy="246" r="10" fill="#1862A4" stroke="none"/>
+    <polyline points="170,230 210,260 250,230" />
+    <polyline points="180,270 220,300 260,270" />
+  </g>
+</svg>

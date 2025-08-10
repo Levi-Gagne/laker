@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1100" height="260" viewBox="0 0 1100 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Layker lockup">
+  <!-- Icon (mini) -->
+  <g transform="translate(10,10) scale(0.45)">
+    <circle cx="256" cy="256" r="240" fill="#DCEAF5"/>
+    <circle cx="256" cy="256" r="220" fill="#FFFFFF"/>
+    <g transform="translate(110,160)">
+      <ellipse cx="170" cy="90" rx="110" ry="60" fill="#155EAD"/>
+      <polygon points="260,90 330,55 330,125" fill="#155EAD"/>
+      <circle cx="220" cy="90" r="8" fill="#FFFFFF"/>
+    </g>
+    <circle cx="256" cy="256" r="240" fill="none" stroke="#155EAD" stroke-width="18"/>
+  </g>
+  <!-- Text -->
+  <text x="270" y="140" font-family="Inter, Segoe UI, Roboto, Arial, sans-serif"
+        font-size="120" font-weight="800" fill="#155EAD">Layker</text>
+  <text x="274" y="190" font-family="Menlo, Consolas, ui-monospace, monospace"
+        font-size="26" fill="#1FB9A8">Lakehouse‑Aligned YAML Kit for Engineering Rules</text>
+</svg>
