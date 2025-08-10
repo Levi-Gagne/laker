@@ -1,7 +1,6 @@
 name: Publish (PyPI/TestPyPI)
 
 on:
-  # Manual trigger lets you choose where to publish
   workflow_dispatch:
     inputs:
       target:
@@ -10,9 +9,12 @@ on:
         type: choice
         options: [testpypi, pypi]
         default: testpypi
-  # Automatic publish on GitHub Release
   release:
     types: [published]
+
+permissions:
+  contents: read
+  id-token: write   # REQUIRED for Trusted Publisher (OIDC)
 
 jobs:
   build:
@@ -41,37 +43,40 @@ jobs:
           path: dist/
 
   publish-testpypi:
-    name: Publish to TestPyPI
+    name: Publish to TestPyPI (OIDC)
     needs: build
+    # Run when manually selected "testpypi"
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi' }}
     runs-on: ubuntu-latest
-    environment: testpypi   # <- create this Environment in Settings → Environments
+    environment: testpypi      # create in Settings → Environments (optional but recommended)
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
-      - name: Publish package (TestPyPI)
+
+      # No username/password here. OIDC is used automatically.
+      - name: Publish package to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          verbose: true
 
   publish-pypi:
-    name: Publish to PyPI
+    name: Publish to PyPI (OIDC)
     needs: build
-    # Either manual dispatch with target=pypi, or auto on Release
+    # Run when manually selected "pypi", or automatically on Release publish
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi') || github.event_name == 'release' }}
     runs-on: ubuntu-latest
-    environment: pypi       # <- create this Environment in Settings → Environments
+    environment: pypi          # create in Settings → Environments (optional but recommended)
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
-      - name: Publish package (PyPI)
+
+      # No username/password here. OIDC is used automatically.
+      - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          verbose: true
