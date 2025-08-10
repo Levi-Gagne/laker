@@ -1,0 +1,74 @@
+layker/
+├── .github/
+│   └── workflows/
+│       └── workflow.yaml
+│
+├── archive/
+│   ├── main.py
+│   ├── sanitizer.py
+│   ├── snapshot_yaml.py
+│   ├── steps_audit.py
+│   ├── steps_differences.py
+│   ├── steps_loader.py
+│   ├── validate.py
+│   ├── validators_evolution.py
+│   └── yaml.py
+│
+├── docs/
+│   ├── audit.md
+│   ├── differences.txt
+│   ├── FAQ
+│   ├── FLOW
+│   ├── future_enhancements.txt
+│   ├── snapshot.txt
+│   └── tree.txt
+│
+├── src/
+│   ├── layker/
+│   │   ├── resources/
+│   │   │   ├── config_driven_table_example.yaml
+│   │   │   ├── example.yaml
+│   │   │   ├── layker_audit.yaml
+│   │   │   └── layker_test.yaml
+│   │   │
+│   │   ├── utils/
+│   │   │   ├── __init__.py
+│   │   │   ├── color.py
+│   │   │   ├── dry_run.py
+│   │   │   ├── paths.py
+│   │   │   ├── printer.py
+│   │   │   ├── spark.py
+│   │   │   ├── table.py
+│   │   │   ├── timer.py
+│   │   │   └── yaml_table_dump.py
+│   │   │
+│   │   ├── validators/
+│   │   │   ├── __init__.py
+│   │   │   ├── differences.py
+│   │   │   └── params.py
+│   │   │
+│   │   ├── __about__.py
+│   │   ├── __init__.py
+│   │   ├── __main__.py
+│   │   ├── differences.py
+│   │   ├── loader.py
+│   │   ├── logger.py
+│   │   ├── main.py
+│   │   ├── snapshot_table.py
+│   │   └── snapshot_yaml.py
+│   │
+│   │
+│   ├── dev_testing.ipynb
+│   └── test_layker.ipynb
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_loader.py
+│   └── test_main.py
+│
+├── .gitignore
+├── LICENSE
+├── MANIFEST.in
+├── pyproject.toml
+├── README.md
+└── requirements.txt
