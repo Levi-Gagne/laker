@@ -27,14 +27,6 @@ from layker.utils.printer import (
     layker_banner,
 )
 
-def _has_changes(diff: Dict[str, Any]) -> bool:
-    # Treat as "no changes" if add/update/remove missing or empty
-    for k in ("add", "update", "remove"):
-        v = diff.get(k)
-        if isinstance(v, dict) and len(v) > 0:
-            return True
-    return False
-
 @laker_banner("Run Table Load")
 def run_table_load(
     yaml_path: str,
