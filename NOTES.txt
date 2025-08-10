@@ -1,36 +1,74 @@
-So i tried pip installing and while it worked this was the ouput: 
-Collecting layker
-  Downloading layker-0.1.0-py3-none-any.whl.metadata (14 kB)
-Collecting pyspark>=3.3.0 (from layker)
-  Downloading pyspark-4.0.0.tar.gz (434.1 MB)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 434.1/434.1 MB 20.8 MB/s eta 0:00:0000:0100:01
-  Preparing metadata (setup.py): started
-  Preparing metadata (setup.py): finished with status 'done'
-Requirement already satisfied: pyyaml>=5.4 in /databricks/python3/lib/python3.11/site-packages (from layker) (6.0)
-Requirement already satisfied: typing-extensions>=4.0 in /databricks/python3/lib/python3.11/site-packages (from layker) (4.10.0)
-Collecting py4j==0.10.9.9 (from pyspark>=3.3.0->layker)
-  Downloading py4j-0.10.9.9-py2.py3-none-any.whl.metadata (1.3 kB)
-Downloading layker-0.1.0-py3-none-any.whl (55 kB)
-Downloading py4j-0.10.9.9-py2.py3-none-any.whl (203 kB)
-Building wheels for collected packages: pyspark
-  Building wheel for pyspark (setup.py): started
-  Building wheel for pyspark (setup.py): finished with status 'done'
-  Created wheel for pyspark: filename=pyspark-4.0.0-py2.py3-none-any.whl size=434741244 sha256=6f8df68a4cd2f4e1d829b6c3b0b2dd8077fb43c719e01f57fd13f6574dae2585
-  Stored in directory: /home/spark-9bc7828e-b256-4e4f-ad18-ab/.cache/pip/wheels/91/e4/c1/3c917d48563ae77204dd185aa3da90da6a1a5526565296dadf
-Successfully built pyspark
-Installing collected packages: py4j, pyspark, layker
-  Attempting uninstall: py4j
-    Found existing installation: py4j 0.10.9.7
-    Not uninstalling py4j at /databricks/python3/lib/python3.11/site-packages, outside environment /local_disk0/.ephemeral_nfs/envs/pythonEnv-9bc7828e-b256-4e4f-ad18-ab9a77afbc29
-    Can't uninstall 'py4j'. No files were found to uninstall.
-ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-databricks-connect 15.4.12 requires py4j==0.10.9.7, but you have py4j 0.10.9.9 which is incompatible.
-Successfully installed layker-0.1.0 py4j-0.10.9.9 pyspark-4.0.0
-Note: you may need to restart the kernel using %restart_python or dbutils.library.restartPython() to use updated packages.
+So this is my pyproject.toml before your chagnes, lets not remove things we need, can you please update this file: 
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
+[project]
+name = "layker"
+# Single-source version from src/layker/__about__.py
+# (keeps PyPI, package, and code in sync)
+dynamic = ["version"]
+description = "Lakehouse-Aligned YAML Kit for Engineering Rules"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+  { name = "Levi Gagne", email = "levigagne0@gmail.com" }
+]
+keywords = ["databricks", "delta", "delta-lake", "spark", "schema", "ddl", "yaml", "audit"]
+license = { file = "LICENSE" }
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Other Environment",
+  "Framework :: Pytest",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Database",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Utilities"
+]
+dependencies = [
+  "pyspark>=3.3.0",
+  "pyyaml>=5.4",
+  "typing-extensions>=4.0",
+]
 
+[project.urls]
+Homepage = "https://github.com/Levi-Gagne/layker"
+Issues = "https://github.com/Levi-Gagne/layker/issues"
+Documentation = "https://github.com/Levi-Gagne/layker#readme"
+Source = "https://github.com/Levi-Gagne/layker"
 
-So on my databricks i already have access to pyspark, and so will 99 percent of people working in databricks, so to speed things up can we not have this package install pyspark if its already avalible? 
+[project.scripts]
+# CLI entrypoint: `layker <args...>`
+layker = "layker.main:cli_entry"
 
+[tool.setuptools]
+include-package-data = true
 
-for example i tested this code without installing pyspark then whne i publish as a package and pip install it automatically does it
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["layker*"]
+
+[tool.setuptools.package-data]
+# package data shipped inside the wheel
+"layker.resources" = ["*.yaml"]
+
+[tool.setuptools.dynamic]
+version = { attr = "layker.__about__.__version__" }
+
+# ---- Optional: dev tooling (ignored by pip unless used via extras) ----
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "black>=24.0",
+  "ruff>=0.4.0",
+  "mypy>=1.5.0",
+]
