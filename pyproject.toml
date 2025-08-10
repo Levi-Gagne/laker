@@ -1,39 +1,73 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "layker"
-version = "0.1.0"
-description = "Lakehouse Aligned YAML Kit for Engineering Rules"
+# Single-source version from src/layker/__about__.py
+# (keeps PyPI, package, and code in sync)
+dynamic = ["version"]
+description = "Lakehouse-Aligned YAML Kit for Engineering Rules"
 readme = "README.md"
-requires-python = ">=3.10"
-authors = [{ name = "Levi Gagne", email = "levigagne0@gmail.com" }]
+requires-python = ">=3.8"
+authors = [
+  { name = "Levi Gagne", email = "levigagne0@gmail.com" }
+]
+keywords = ["databricks", "delta", "delta-lake", "spark", "schema", "ddl", "yaml", "audit"]
 license = { file = "LICENSE" }
-
-# Keep core deps light. PySpark is optional (provided on Databricks).
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Other Environment",
+  "Framework :: Pytest",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Database",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Utilities"
+]
 dependencies = [
-  "PyYAML>=6",
+  "pyspark>=3.3.0",
+  "pyyaml>=5.4",
   "typing-extensions>=4.0",
 ]
-
-[project.optional-dependencies]
-spark = ["pyspark>=3.5,<4"]
 
 [project.urls]
 Homepage = "https://github.com/Levi-Gagne/layker"
 Issues = "https://github.com/Levi-Gagne/layker/issues"
+Documentation = "https://github.com/Levi-Gagne/layker#readme"
+Source = "https://github.com/Levi-Gagne/layker"
 
 [project.scripts]
+# CLI entrypoint: `layker <args...>`
 layker = "layker.main:cli_entry"
 
 [tool.setuptools]
-package-dir = { "" = "src" }
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["layker*"]
 
-# Include packaged resources (e.g., audit YAMLs) inside the wheel
 [tool.setuptools.package-data]
-layker = ["resources/*.yaml"]
+# package data shipped inside the wheel
+"layker.resources" = ["*.yaml"]
+
+[tool.setuptools.dynamic]
+version = { attr = "layker.__about__.__version__" }
+
+# ---- Optional: dev tooling (ignored by pip unless used via extras) ----
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "black>=24.0",
+  "ruff>=0.4.0",
+  "mypy>=1.5.0",
+]
