@@ -26,6 +26,14 @@ from layker.utils.printer import (
     print_error,
 )
 
+def _has_changes(diff: Dict[str, Any]) -> bool:
+    # Treat as "no changes" if add/update/remove missing or empty
+    for k in ("add", "update", "remove"):
+        v = diff.get(k)
+        if isinstance(v, dict) and len(v) > 0:
+            return True
+    return False
+
 def run_table_load(
     yaml_path: str,
     dry_run: bool = False,
@@ -56,9 +64,8 @@ def run_table_load(
         print(section_header("STEP 3/5: COMPUTE DIFFERENCES"))
         # Compute differences using YAML snapshot + table snapshot (None => full create)
         snapshot_diff = generate_differences(snapshot_yaml, table_snapshot)
-        print(f"Printing 'snapshot_diff': {snapshot_diff}")
-        # If no changes, exit early
-        if not snapshot_diff:
+        # If no changes, exit early (prevents logging on no-ops)
+        if not _has_changes(snapshot_diff):
             print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
             sys.exit(0)
 
@@ -90,6 +97,7 @@ def run_table_load(
                     spark=spark,
                     env=env,
                     before_snapshot=table_snapshot,   # may be None on full create
+                    differences=snapshot_diff,         # <-- pass the diff dict
                     target_table_fq=fq,
                     yaml_path=yaml_path,
                     audit_table_yaml_path=audit_log_table,
