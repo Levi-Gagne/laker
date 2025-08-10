@@ -14,6 +14,7 @@ from layker.logger import audit_log_flow  # one-call audit helper
 
 # --- Validators ---
 from layker.validators.params import validate_params
+from layker.validators.differences import validate_differences  # RENAMED unified controller
 
 # --- Utils ---
 from layker.utils.spark import get_or_create_spark
@@ -61,6 +62,9 @@ def run_table_load(
             print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
             sys.exit(0)
 
+        # >>> Unified differences validation (schema evolution + future checks) <<<
+        validate_differences(snapshot_diff, table_snapshot)
+
         # If mode==diff, print proposed changes and exit
         if mode == "diff":
             print_warning(f"[DIFF] Proposed changes:")
@@ -77,7 +81,7 @@ def run_table_load(
             # --- Audit after the load (resolve parameter in-place) ---
             if audit_log_table is not False:
                 if audit_log_table is True:
-                    # Inline default path (no module-level constant)
+                    # Inline default path
                     audit_log_table = "src/layker/resources/audit.yaml"
                 # else it's a user-supplied path string
 
@@ -123,7 +127,6 @@ def cli_entry():
     run_table_load(
         yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit_log_table=audit_log_table
     )
-
 
 if __name__ == "__main__":
     cli_entry()
