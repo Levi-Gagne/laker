@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, List
 
 import yaml
 from pyspark.sql import Row, SparkSession
+from pyspark.sql import functions as F
 
 from layker.yaml import TableSchemaConfig
 from layker.snapshot_table import TableSnapshot
@@ -31,7 +32,6 @@ class TableAuditLogger:
     """
 
     ALLOWED_ENVS = {"prd", "dev", "test", "qa"}
-    ALLOWED_SUBJECT_TYPES = {"table_description"}
 
     def __init__(
         self,
@@ -105,6 +105,44 @@ class TableAuditLogger:
         return hashlib.sha256(encoded).hexdigest()
 
     # ------------------------
+    # change_key helpers
+    # ------------------------
+    def _compute_change_key(self, fqn: str, change_category: str) -> str:
+        """
+        Build a human-readable sequence key per table:
+          - For CREATE:        "create-{n}"
+          - For UPDATE:        "create-{max_create}~update-{m}"
+        Counts are computed from existing rows in the audit table for this FQN.
+        """
+        try:
+            logs_df = self.spark.table(self.log_table).where(F.col("fqn") == fqn)
+        except Exception:
+            # If table is empty/newly created, start from scratch
+            logs_df = None
+
+        prior_create = 0
+        prior_update = 0
+        if logs_df is not None and logs_df.head(1):
+            agg = (
+                logs_df.groupBy("change_category")
+                .agg(F.count(F.lit(1)).alias("cnt"))
+                .collect()
+            )
+            for row in agg:
+                if row["change_category"] == "create":
+                    prior_create = int(row["cnt"] or 0)
+                elif row["change_category"] == "update":
+                    prior_update = int(row["cnt"] or 0)
+
+        if change_category == "create":
+            create_seq = prior_create + 1
+            return f"create-{create_seq}"
+        else:
+            update_seq = prior_update + 1
+            # include the highest create number seen so far (0 if none)
+            return f"create-{prior_create}~update-{update_seq}"
+
+    # ------------------------
     # Row construction
     # ------------------------
     def _row(self, **kw) -> Row:
@@ -112,16 +150,20 @@ class TableAuditLogger:
         before_val = self._format_snapshot(kw.get("before_value"))
         after_val = self._format_snapshot(kw.get("after_value"))
 
+        env_norm = self._normalized_env(kw.get("env"))
+        fqn = kw.get("fqn")
+
+        change_category = "create" if before_val is None else "update"
+        change_key = self._compute_change_key(fqn=fqn, change_category=change_category)
+
         computed: Dict[str, Any] = {
             "change_id": str(uuid.uuid4()),
             "run_id": kw.get("run_id"),
-            "env": self._normalized_env(kw.get("env")),
+            "env": env_norm,
             "yaml_path": kw.get("yaml_path"),
-            "fqn": kw.get("fqn"),
-            "change_category": "create" if before_val is None else "update",
-            "change_type": "create_table" if before_val is None else "update_table",
-            "subject_type": "table_description",
-            "subject_name": kw.get("subject_name") or (kw.get("fqn") or "").split(".")[-1],
+            "fqn": fqn,
+            "change_category": change_category,
+            "change_key": change_key,  # NEW human-readable sequence key
             "before_value": before_val,
             "after_value": after_val,
             "notes": kw.get("notes"),
@@ -131,6 +173,7 @@ class TableAuditLogger:
             "updated_by": None,
         }
 
+        # Build ordered dict strictly per YAML-defined columns
         ordered: Dict[str, Any] = {c: computed.get(c) for c in self.columns}
         return Row(**ordered)
 
@@ -145,7 +188,7 @@ class TableAuditLogger:
         fqn: str,
         before_value: Any,
         after_value: Any,
-        subject_name: Optional[str] = None,
+        subject_name: Optional[str] = None,  # kept for compatibility; ignored
         notes: Optional[str] = None,
     ) -> None:
         row = self._row(
@@ -155,7 +198,6 @@ class TableAuditLogger:
             fqn=fqn,
             before_value=before_value,
             after_value=after_value,
-            subject_name=subject_name,
             notes=notes,
         )
         df = self.spark.createDataFrame([row])
@@ -213,7 +255,7 @@ def audit_log_flow(
         fqn=target_table_fq,
         before_value=before_snapshot,
         after_value=after_snapshot,
-        subject_name=target_table_fq.split(".")[-1],
+        subject_name=None,  # ignored by logger
         notes=notes,
     )
     print(f"[AUDIT] Event logged to {logger.log_table}")
