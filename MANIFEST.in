@@ -1,24 +1,30 @@
-# Include essential docs
+# MANIFEST.in — Layker
+
+# ---- Top-level docs (ship with sdist) ----
 include README.md
 include LICENSE
 include TREE.txt
 include FLOW.txt
 
-# Include YAML config and audit files
-recursive-include src/layker/config *.yaml
-recursive-include src/layker/changelog *.yaml
-
-# Include tests (if you want to distribute them)
-recursive-include tests *.py
-
-# Include any example scripts (if you add these)
-recursive-include examples *.py
-recursive-include examples *.yaml
-
-# Include package metadata (setup, pyproject)
+# ---- Project metadata ----
 include pyproject.toml
-include setup.py
 include requirements.txt
 
-# Include any markdown documentation in source tree
-recursive-include src/layker *.md
+# ---- Runtime package data (YAMLs) ----
+recursive-include src/layker/resources *.yaml
+
+# ---- Optional: examples & tests in sdist ----
+recursive-include examples *.py
+recursive-include examples *.yaml
+recursive-include tests *.py
+
+# ---- Prune non-essential folders from sdist ----
+prune .github
+prune .venv
+prune .idea
+prune .pytest_cache
+prune build
+prune dist
+
+# ---- Ignore compiled/junk files ----
+global-exclude *.py[cod] __pycache__ *.so *.dylib
