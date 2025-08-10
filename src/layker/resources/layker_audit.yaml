@@ -7,7 +7,6 @@ table: layker_audit
 primary_key: [change_id]
 partitioned_by: []
 
-
 tags:
   team: dataops
   project: layker
@@ -94,41 +93,48 @@ columns:
     active: true
 
   9:
+    name: differences
+    datatype: string
+    nullable: true
+    comment: "Snapshot difference dictionary as JSON (pretty)."
+    active: true
+
+  10:
     name: after_value
     datatype: string
     nullable: true
     comment: "Full post-change metadata as JSON."
     active: true
 
-  10:
+  11:
     name: notes
     datatype: string
     nullable: true
     comment: "Optional notes/context."
     active: true
 
-  11:
+  12:
     name: created_at
     datatype: timestamp
     nullable: false
     comment: "When this log row was created (UTC, required)."
     active: true
 
-  12:
+  13:
     name: created_by
     datatype: string
     nullable: false
     comment: "Who created this log row (user or service principal, required)."
     active: true
 
-  13:
+  14:
     name: updated_at
     datatype: timestamp
     nullable: true
     comment: "When this log row was last updated (nullable if never updated)."
     active: true
 
-  14:
+  15:
     name: updated_by
     datatype: string
     nullable: true
