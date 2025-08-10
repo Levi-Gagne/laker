@@ -1,295 +1,233 @@
-# Layker Audit Logic and Scenario Rules
+# Layker Audit Process
+
+> **Purpose**: Document how Layker detects changes, writes audit rows, and how to query/operate the audit log.
 
 ---
 
-## Purpose
+## Overview
 
-The Layker audit logger captures every structural or metadata modification to tables managed by Layker.  
-Modifications include: **table creation**, any updates (add, remove, alter of any property), and table recreation.  
-The log is append-only for the lifetime of usage and provides a forensic record for compliance and rollback.
+Layker is a **YAML-driven table metadata manager** for Databricks/Spark.  
+Every time Layker **applies** a change (create or alter), it writes an **audit row** that captures:
 
----
+- The target **table FQN** (catalog.schema.table)
+- **Before** snapshot (JSON) of the table metadata
+- **Differences** (JSON) that were applied
+- **After** snapshot (JSON) of the table metadata
+- **Change category** (create/update) and a readable **change key** sequence
+- Context (env, yaml_path, who/when)
 
-## Audit Table Column Reference (all columns)
-
-- **change_id:** Unique ID (UUID or similar) for each change event; primary key for audit table.
-- **batch_id:** Identifier for the batch (create or update run) that produced this log row. All rows in a batch share the same batch_id.
-- **run_id:** Databricks job run ID, if available (or null if run from notebook/manual).
-- **env:** Target environment ("dev", "prd", "test", "qa", etc.)—always lower case.
-- **yaml_path:** Full path to the YAML config file that triggered this event.
-- **fqn:** Fully qualified name of the target table, constructed as `f"{catalog}.{schema}.{table}"` from the YAML config.
-- **change_category:** High-level type: "create" (table creation), "update" (any change), "delete" (not typically used), or "noop" (no change, not logged).
-- **change_type:** Fine-grained type of change (e.g. "add_column", "drop_column", "rename_column", "type_change", "update_tag", etc.).
-- **subject_type:** Entity type affected by the change (e.g. "column_name", "table_tag", "column_check_constraint", etc.).
-- **subject_name:** Name/key of the subject changed (column index, tag key, constraint name, etc.).
-- **before_value:** Previous value of the changed item (null if new).
-- **after_value:** New value of the changed item (null if removed).
-- **notes:** Optional free-text notes for error info, context, or explanation.
-- **created_at:** UTC timestamp when this log row was written.
-- **created_by:** User/service principal that executed the operation.
+No audit row is written when **no differences** are detected.
 
 ---
 
-## Batch, Change ID, FQN, and Uniqueness Rules
+## When does Layker write to the audit table?
 
-- **change_id:** Globally unique per log row; primary key. Used for deduplication and record tracking.
-- **batch_id:** All log rows from a single operation (create or update batch) share the same batch_id, grouping changes together.
-    - **Format (f-string style):**
-        - For creates:       `f"create-{N}_{fqn}"`
-        - For updates:       `f"{maxCreate}_update-{M}_{fqn}"`
-    - **Where:**
-        - **N:** Number of CREATE events already logged for this table, **plus one**.
-            - Example:  
-                If log rows exist with  
-                    batch_id = create-1_{fqn}  
-                    batch_id = create-2_{fqn}  
-                ...and the table is deleted, then recreated,  
-                the next batch_id on CREATE will be  
-                    batch_id = create-3_{fqn}
-            - N is determined at runtime by querying all batch_ids for the current {fqn} with pattern 'create-*_{fqn}' and taking the highest N, then incrementing by 1.
-        - **maxCreate:** The highest N for the current {fqn}. All updates after a given create are grouped under this N.
-        - **M:** Number of UPDATE batches already performed since the most recent create, plus one.
-            - Example:  
-                After batch_id = create-3_{fqn},  
-                the first update run would use batch_id = 3_update-1_{fqn},  
-                the next would be 3_update-2_{fqn}, etc.
-            - When a table is deleted and recreated, N increases, and M resets for the new create version.
-- **fqn:** The **fully qualified table name**. Constructed as  
-    `f"{catalog}.{schema}.{table}"`
-    using values from the YAML config.
-- **run_id:** The Databricks job or notebook run ID when the change is detected and logged (should be dynamically captured using Databricks context if possible).
-- To reconstruct all changes for a table, batch, or update: filter on batch_id and/or fqn.
+1. **YAML is validated** and the live table is snapshotted (if it exists).
+2. Layker computes the **differences** between YAML and the live table.
+3. If **no change** (the diff contains only `full_table_name`), Layker **exits cleanly** and **skips auditing**.
+4. If changes exist and the run mode is `apply` or `all`, Layker:
+   - Applies CREATE/ALTER operations
+   - Calls **`audit_log_flow(...)`** to append a single row to the audit table
+
+> The audit table is automatically created from the packaged YAML if it does not exist yet.
 
 ---
 
-## Audit Logic (Nested Rule Outline)
+## Audit table schema (default)
 
-1. **On CREATE** (table does not exist in target catalog.schema)
-    - Action: Table is created as defined in the YAML.
-    - Audit logging:
-      - Log a single row:
-          - batch_id: `f"create-{N}_{fqn}"`
-          - change_category: "create"
-          - before_value: JSON array with a single object:
-            ```json
-            [
-              {
-                "{fqn}": { full YAML config, all present/nested keys }
-              }
-            ]
-            ```
-          - after_value: JSON object of the config, top-level only.
-          - Only present keys from YAML included—matches user input structure.
-          - No empty/null/unused keys included.
+Defined in `src/layker/resources/layker_audit.yaml` (packaged by Layker). Columns (in order):
 
-2. **On UPDATE** (table exists and any schema or metadata difference is detected)
-    - Action: Each addition, removal, or change is applied as specified by YAML.
-    - Audit logging:
-      - Log one row **per change**, all from same run share the same batch_id:
-          - batch_id: `f"{maxCreate}_update-{M}_{fqn}"`
-          - change_category: "update"
-          - change_type: ("add_column", "drop_column", "rename_column", "type_change", "update_tag", "update_property", "add_constraint", "drop_constraint", etc.)
-          - subject_type: (e.g. "column_name", "table_tag", "column_check_constraint", etc.)
-          - subject_name: the column name, tag key, or constraint key being changed
-          - before_value: old value (JSON or null)
-          - after_value: new value (JSON or null)
-      - All rows from the same batch share a batch_id, so you can group a run's changes together.
+| # | Column           | Type      | Notes |
+|---|------------------|-----------|-------|
+| 1 | `change_id`      | string    | UUID for each audit row (primary key) |
+| 2 | `run_id`         | string    | Optional job or pipeline run identifier |
+| 3 | `env`            | string    | Environment/catalog hint (`prd`, `dev`, `test`, `qa`) |
+| 4 | `yaml_path`      | string    | Path to the YAML used for this run |
+| 5 | `fqn`            | string    | Fully qualified target table (`catalog.schema.table`) |
+| 6 | `change_category`| string    | `"create"` if no *before*, otherwise `"update"` |
+| 7 | `change_key`     | string    | Human-friendly sequence per table: `create-1`, `create-1~update-3`, … |
+| 8 | `before_value`   | string    | JSON snapshot before change (can be null on first create) |
+| 9 | `differences`    | string    | JSON diff dictionary that was applied |
+|10 | `after_value`    | string    | JSON snapshot after change |
+|11 | `notes`          | string    | Optional free text |
+|12 | `created_at`     | timestamp | UTC timestamp for row creation |
+|13 | `created_by`     | string    | Actor (user/service principal) |
+|14 | `updated_at`     | timestamp | Reserved (null for append-only) |
+|15 | `updated_by`     | string    | Reserved (null for append-only) |
 
-3. **On NO-OP** (table exists and no difference detected)
-    - Action: No log rows are written.
-    - Only actual modifications (create or update) result in audit events.
-
-4. **On MULTIPLE CREATES** (table dropped and re-created)
-    - Every new create (even after drop) increments N in batch_id ("create-2_", "create-3_", etc).
-    - All future updates after a create are grouped under that version.
-    - Enables complete tracking of table incarnations.
+> **Uniqueness expectation**: `(fqn, change_key)` should be unique over time. Layker computes the sequence to avoid collisions.
 
 ---
 
-## Example CREATE Log Row
+## Change category & change key
 
-```yaml
-- change_id: 1742fbc0-210a-42ca-b0e0-845a1f3bca8e  # (UUID for this event)
-  batch_id: create-1_dq_dev.lmg_sandbox.config_driven_table_example
-  run_id: 98765432100
-  env: dev
-  yaml_path: /Workspace/Users/levi.gagne@claconnect.com/ddl/config_example.yaml
-  fqn: dq_dev.lmg_sandbox.config_driven_table_example
-  change_category: create
-  change_type: create_table
-  subject_type: table_description
-  subject_name: config_driven_table_example
-  before_value: |
-    [
-      {
-        "dq_dev.lmg_sandbox.config_driven_table_example": {
-          "catalog": "dq_dev",
-          "schema": "lmg_sandbox",
-          "table": "config_driven_table_example",
-          "primary_key": ["example_id"],
-          "partitioned_by": ["event_date"],
-          "unique_keys": [],
-          "table_check_constraints": {
-            "constraint_1": {
-              "name": "check_event_date_past",
-              "expression": "event_date <= current_date()"
-            }
-          },
-          "row_filters": {
-            "row_filter_1": {
-              "name": "rls_internal_only",
-              "expression": "classification = 'internal'"
-            }
-          },
-          "tags": {
-            "team": "dq",
-            "project": "poc",
-            "data_owner": "levi.gagne@claconnect.com",
-            "classification": "internal"
-          },
-          "owner": "levi.gagne@claconnect.com",
-          "properties": {
-            "comment": "**Table:** dq_dev.lmg_sandbox.config_driven_table_example\n\n**Governance**\n- YAML is the source of truth; changes in UI are not tracked.\n- Required: catalog, schema, table, at least one column with name/datatype.\n- Use partitioned_by for scalability if needed.\n\n**Evolution**\n- Adding columns to the end is supported.\n- Renaming columns (by position/type) is supported.\n- Data type changes or column drops require matching positions.\n- Foreign keys here are not enforced—reference only.\n",
-            "table_properties": {
-              "delta.columnMapping.mode": "name",
-              "delta.minReaderVersion": "2",
-              "delta.minWriterVersion": "5"
-            }
-          },
-          "columns": {
-            "1": {
-              "name": "example_id",
-              "datatype": "string",
-              "nullable": false,
-              "comment": "Primary key: unique row id for this table.",
-              "tags": {
-                "pii": false,
-                "business_key": "yes",
-                "sensitive": true
-              },
-              "column_masking_rule": "MASKED WITH SHA256",
-              "default_value": null,
-              "variable_value": "special_code_string",
-              "allowed_values": ["A", "B", "C"],
-              "column_check_constraints": {
-                "constraint_1": {
-                  "name": "check_example_id_nonempty",
-                  "expression": "length(example_id) > 0"
-                },
-                "constraint_2": {
-                  "name": "check_example_id_not_test",
-                  "expression": "example_id != 'TEST'"
-                }
-              },
-              "active": true
-            },
-            "2": {
-              "name": "minimal_col",
-              "datatype": "string",
-              "nullable": true,
-              "active": true
-            }
-            // ...other columns as in the YAML
-          }
-        }
-      }
-    ]
-  after_value: |
-    {
-      "catalog": "dq_dev",
-      "schema": "lmg_sandbox",
-      "table": "config_driven_table_example",
-      "primary_key": ["example_id"],
-      "partitioned_by": ["event_date"],
-      "unique_keys": [],
-      "table_check_constraints": {
-        "constraint_1": {
-          "name": "check_event_date_past",
-          "expression": "event_date <= current_date()"
-        }
-      },
-      "row_filters": {
-        "row_filter_1": {
-          "name": "rls_internal_only",
-          "expression": "classification = 'internal'"
-        }
-      },
-      "tags": {
-        "team": "dq",
-        "project": "poc",
-        "data_owner": "levi.gagne@claconnect.com",
-        "classification": "internal"
-      },
-      "owner": "levi.gagne@claconnect.com",
-      "properties": {
-        "comment": "...",
-        "table_properties": {
-          "delta.columnMapping.mode": "name",
-          "delta.minReaderVersion": "2",
-          "delta.minWriterVersion": "5"
-        }
-      },
-      "columns": {
-        "1": { ... },
-        "2": { ... }
-        // ...etc
-      }
-    }
-  notes: "Initial table create"
-  created_at: 2024-07-21T21:18:07.102Z
-  created_by: "levi.gagne@claconnect.com"
+- **Change category**
+  - `create` when **no “before” snapshot** is present (table didn’t exist previously)
+  - `update` when **before** is present
+
+- **Change key** (per table FQN)
+  - First-ever create → `create-1`
+  - Next updates on the same lineage → `create-1~update-1`, `create-1~update-2`, ...
+  - If the table is later dropped and re-created → new lineage starts at `create-2` (then `create-2~update-1`, etc.)
+
+Layker computes these counts by filtering the audit table **by FQN** and counting prior rows by `change_category`.
+
+---
+
+## End-to-end flow
+
+```
+run_table_load(yaml_path, env, mode, audit_log_table, dry_run=False)
+
+1) Validate YAML
+   - On failure → exit with clear messages
+   - On mode='validate' → exit(0)
+
+2) Snapshot live table (if exists)
+
+3) Compute differences (YAML vs table)
+   - If only 'full_table_name' in diff → NO-OP → exit(0), no audit row
+
+4) Validate differences (schema-evolution preflight)
+   - Detect add/rename/drop column intents
+   - Require Delta props:
+       delta.columnMapping.mode = name
+       delta.minReaderVersion   = 2
+       delta.minWriterVersion   = 5
+   - On missing/invalid → print and exit(2)
+
+5) Apply metadata changes
+   - CREATE TABLE (from diff) or ALTER clauses
+
+6) Audit (if audit_log_table != False)
+   - Ensure audit table exists (create from packaged YAML if needed)
+   - Refresh target table (skipped with a warning on serverless)
+   - Take AFTER snapshot
+   - Write one audit row with: before, differences, after, keys & context
 ```
 
 ---
 
-## Example UPDATE Log Rows (same batch_id, one run)
+## Serverless handling
 
-```yaml
-- change_id: 4ae3f1e2-abc2-4a7c-9e27-0807e9572b0a
-  batch_id: 1_update-2_dq_dev.lmg_sandbox.config_driven_table_example
-  run_id: 98765432111
-  env: dev
-  yaml_path: /Workspace/Users/levi.gagne@claconnect.com/ddl/config_example.yaml
-  fqn: dq_dev.lmg_sandbox.config_driven_table_example
-  change_category: update
-  change_type: add_column
-  subject_type: column_name
-  subject_name: "14"
-  before_value: null
-  after_value: |
-    {
-      "name": "new_col",
-      "datatype": "int",
-      "nullable": true,
-      "active": true
-    }
-  notes: "Added a new column as per YAML"
-  created_at: 2024-07-21T21:28:05.221Z
-  created_by: "levi.gagne@claconnect.com"
+- Databricks **serverless** does not support `REFRESH TABLE`.
+- Layker detects this and **skips refresh with a warning**; auditing proceeds.
 
-- change_id: 41ac92c3-3827-4fd2-b4b2-603aaeffcdbb
-  batch_id: 1_update-2_dq_dev.lmg_sandbox.config_driven_table_example
-  run_id: 98765432111
-  env: dev
-  yaml_path: /Workspace/Users/levi.gagne@claconnect.com/ddl/config_example.yaml
-  fqn: dq_dev.lmg_sandbox.config_driven_table_example
-  change_category: update
-  change_type: drop_column
-  subject_type: column_name
-  subject_name: "3"
-  before_value: |
-    {
-      "name": "column_1",
-      "datatype": "string",
-      "nullable": true,
-      "active": true
-    }
-  after_value: null
-  notes: "Dropped column_1 as per YAML diff"
-  created_at: 2024-07-21T21:28:05.221Z
-  created_by: "levi.gagne@claconnect.com"
+---
+
+## Failure modes & guardrails
+
+- **Invalid YAML** → fails early with explicit error list.
+- **Schema evolution without required Delta properties** → validation error; no changes applied.
+- **Spark Connect inference issues** → Layker uses an **explicit Spark schema** when writing the audit row.
+- **No changes** → exits early; does **not** write an audit row.
+
+---
+
+## Example usage
+
+**Python**
+```python
+from pyspark.sql import SparkSession
+from layker.main import run_table_load
+
+spark = SparkSession.builder.getOrCreate()
+
+run_table_load(
+    yaml_path="src/layker/resources/example.yaml",
+    env="prd",
+    mode="all",
+    dry_run=False,
+    audit_log_table=True  # or a custom audit YAML path
+)
+```
+
+**Direct audit call** (rarely needed; run_table_load calls this for you)
+```python
+from layker.logger import audit_log_flow
+
+audit_log_flow(
+    spark=spark,
+    env="prd",
+    before_snapshot=before_dict,          # None for first create
+    differences=diff_dict,                # the applied diff
+    target_table_fq="dq_dev.schema.tbl",
+    yaml_path="src/layker/resources/example.yaml",
+    audit_table_yaml_path="layker/resources/layker_audit.yaml",
+    run_id=None,
+    notes=None,
+    snapshot_format="json_pretty",
+)
 ```
 
 ---
 
-**END**
+## Query examples
+
+**Count changes per table**
+```sql
+SELECT fqn, change_category, COUNT(*) AS cnt
+FROM dq_dev.layker.layker_audit
+GROUP BY fqn, change_category
+ORDER BY fqn, change_category;
+```
+
+**Latest change per table**
+```sql
+SELECT fqn, MAX(created_at) AS last_change_at
+FROM dq_dev.layker.layker_audit
+GROUP BY fqn;
+```
+
+**Show lineage for one table**
+```sql
+SELECT change_key, change_category, created_at
+FROM dq_dev.layker.layker_audit
+WHERE fqn = 'dq_dev.schema.table_name'
+ORDER BY created_at;
+```
+
+**Compare before vs after for last update**
+```sql
+WITH last_row AS (
+  SELECT *
+  FROM dq_dev.layker.layker_audit
+  WHERE fqn = 'dq_dev.schema.table_name'
+  ORDER BY created_at DESC
+  LIMIT 1
+)
+SELECT
+  from_json(before_value, 'STRING') AS before_json,
+  from_json(after_value,  'STRING') AS after_json,
+  differences
+FROM last_row;
+```
+
+---
+
+## Operations & governance
+
+- **Append-only**: rows are appended; no deletes/updates.
+- **Retention**: choose retention based on your compliance posture.
+- **Access control**: restrict write access to the service account that runs Layker.
+- **Backfilling**: if you recreate the audit table, Layker will resume at the computed lineage for each table FQN.
+
+---
+
+## FAQ (audit-specific)
+
+**Q: Will Layker ever write an audit row on a NO-OP?**  
+A: No. If there are no differences to apply, Layker exits before auditing.
+
+**Q: Can I customize the audit table name/location?**  
+A: Yes—pass a custom audit YAML path to `audit_log_table` (or `True` to use the default). The **YAML defines** the destination table.
+
+**Q: What if someone drops the target table outside Layker?**  
+A: The next run will treat it as `create`; the `change_key` lineage will increment (`create-2`, etc.).
+
+**Q: What format is used for JSON snapshots?**  
+A: Default is **pretty JSON**; you can switch to compact or key/value formatting via `snapshot_format`.
+
+---
+
+*Last updated: generated by Layker docs helper.*
