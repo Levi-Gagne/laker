@@ -2,7 +2,8 @@ Below are examples of snapshots used thorughout this project including: yaml/tab
 
 
 
-Example of Yaml/Table Snapshot Dictionary:
+Yaml/Table Snapshot Dictionary:
+-------------------------------------------------------------------------
 {
     "full_table_name": "",
     "catalog": "",
@@ -38,6 +39,152 @@ Example of Yaml/Table Snapshot Dictionary:
             "tags": {},
             "column_masking_rule": "",
             "column_check_constraints": {}
+        }
+    }
+}
+
+
+
+Differences Snapshot & Semantics Dictionary:
+
+- Differnces Semantic Dictionary:
+-------------------------------------------------------------------------
+semantics = {
+    "add": {
+        "primary_key": "Add new primary keys only",
+        "partitioned_by": "Add new partitions only (cannot update/remove)",
+        "unique_keys": "Add new unique keys only",
+        "foreign_keys": "Add new foreign keys only",
+        "table_check_constraints": "Add new table check constraints only",
+        "row_filters": "Add new row filters only",
+        "table_tags": "Add new table tags only (no update; removal via 'remove')",
+        "owner": "Set or update owner",
+        "table_comment": "Overwrite (add or replace comment)",
+        "table_properties": "Add new table properties only (no removal or update in v1)",
+
+        "columns": {
+            1: {
+                "name": "Add new column (create or rename on create)",
+                "datatype": "Add new column datatype",
+                "nullable": "Add new column nullable status",
+                "column_comment": "Add or update column comment",
+                "column_tags": "Add new column tags only (remove via 'remove')",
+                "column_masking_rule": "Add or update column masking rule",
+                "column_check_constraints": "Add new column check constraints only (remove via 'remove')",
+            }
+        }
+    },
+
+    "update": {
+        "primary_key": "Update existing primary keys (adding only allowed post-create)",
+        "table_check_constraints": "Update table check constraints",
+        "row_filters": "Update row filters",
+        "table_tags": "Overwrite tags (add new; remove old via 'remove')",
+        "owner": "Update owner",
+        "table_comment": "Overwrite comment",
+        "table_properties": "Update table properties",
+
+        "columns": {
+            1: {
+                "name": "Rename existing column",
+                "column_comment": "Overwrite column comment",
+                "column_tags": "Overwrite column tags (add new; remove old via 'remove')",
+                "column_masking_rule": "Overwrite column masking rule",
+                "column_check_constraints": "Update column check constraints",
+            }
+        }
+    },
+
+    "remove": {
+        "table_check_constraints": "Remove listed table check constraints",
+        "row_filters": "Remove listed row filters",
+        "table_tags": "Remove listed table tags",
+
+        "columns": {
+            1: {
+                "name": "Remove entire column",
+                "column_tags": "Remove listed column tags",
+                "column_check_constraints": "Remove listed column check constraints",
+            }
+        }
+    }
+}
+
+
+- Differnces Dictionary:
+    - Example blank dictionary that the src/layker/differnces.py should produce and pass to src/layker/loader.py
+-------------------------------------------------------------------------
+DIFF_TEMPLATE = {
+    "full_table_name": "",
+    "add": {
+        "primary_key": [],
+        "partitioned_by": [],
+        "unique_keys": [],
+        "foreign_keys": {},
+        "table_check_constraints": {
+            "constraint_1": {"name": "", "expression": ""},
+        },
+        "row_filters": {
+            "row_filter_1": {"name": "", "expression": ""}
+        },
+        "table_tags": {"tag_1": ""},
+        "owner": "",
+        "table_comment": "",
+        "table_properties": {"property_1": ""},
+        "columns": {
+            1: {
+                "name": "",
+                "datatype": "",
+                "nullable": True,
+                "column_comment": "",
+                "column_tags": {"tag_1": ""},
+                "column_masking_rule": "",
+                "column_check_constraints": {
+                    "check_1": {"name": "", "expression": ""}
+                }
+            }
+        }
+    },
+    "update": {
+        "primary_key": [],
+        "table_check_constraints": {
+            "constraint_1": {"name": "", "expression": ""},
+        },
+        "row_filters": {
+            "row_filter_1": {"name": "", "expression": ""}
+        },
+        "table_tags": {"tag_1": ""},
+        "owner": "",
+        "table_comment": "",
+        "table_properties": {"property_1": ""},
+        "columns": {
+            1: {
+                "name": "",
+                "column_comment": "",
+                "column_tags": {"tag_1": ""},
+                "column_masking_rule": "",
+                "column_check_constraints": {
+                    "check_1": {"name": "", "expression": ""}
+                }
+            }
+        }
+    },
+    "remove": {
+        "table_check_constraints": {
+            "constraint_1": {"name": "", "expression": ""},
+        },
+        "row_filters": {
+            "row_filter_1": {"name": "", "expression": ""}
+        },
+        "table_tags": {"tag_1": ""},
+        "columns": {
+            1: {
+                "name": "",
+                "column_tags": {"tag_1": ""},
+                "column_check_constraints": {
+                    "check_1": {"name": "", "expression": ""}
+                }
+            }
         }
     }
 }
