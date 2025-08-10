@@ -1,5 +1,124 @@
 # src/layker/main.py
 
+"""
+START: run_table_load  (decorated with @laker_banner → prints START/END banners + elapsed)
+
+|
+|-- 0) Normalize inputs & Spark session
+|     |-- If `spark` is None → create with get_or_create_spark().
+|     |-- validate_params(yaml_path, mode, env, audit_log_table, spark):
+|           |-- Confirms YAML path is reachable and ends with .yml/.yaml.
+|           |-- Ensures mode ∈ {"validate","diff","apply","all"} (defaults to "apply").
+|           |-- Validates env characters.
+|           |-- Validates `audit_log_table` ∈ {True, False, <.yml/.yaml path>}.
+|           |-- Pings Spark (`spark.sql("SELECT 1")`) to ensure session is usable.
+|           |-- Returns cleaned (mode, env, audit_log_table).
+|
+|-- 1) VALIDATE YAML & BUILD SNAPSHOT
+|     |-- (a) validate_and_snapshot_yaml(yaml_path, env, mode):
+|           |-- Fully validates YAML structure (top keys, columns 1..N, types, constraints, tags, etc.).
+|           |-- Sanitizes comments/properties/tags.
+|           |-- Builds `snapshot_yaml` (canonical DDL snapshot) and `fq` (catalog.schema.table).
+|     |-- (b) If mode == "validate":
+|           |-- Print success and EXIT 0.
+|
+|-- 2) TABLE SNAPSHOT (live)
+|     |-- table_snapshot = TableSnapshot(spark, fq).build_table_metadata_dict()
+|           |-- If table doesn’t exist → table_snapshot = None (signals a full CREATE).
+|
+|-- 3) COMPUTE DIFFERENCES
+|     |-- (a) snapshot_diff = generate_differences(snapshot_yaml, table_snapshot)
+|           |-- If table_snapshot is None → a complete “add” section for full CREATE.
+|           |-- Else → only real deltas in {add | update | remove}.
+|     |-- (b) No-op guard:
+|           |-- has_changes(snapshot_diff) ?
+|                 |-- False → print “No metadata changes …” and EXIT 0
+|                       (prevents unnecessary load and prevents audit on no-ops).
+|
+|-- 4) VALIDATE DIFFERENCES (unified controller)
+|     |-- validate_differences(snapshot_diff, table_snapshot)
+|           |-- 4.1) Schema-evolution detection (only if table exists; i.e., table_snapshot != None):
+|                 |-- Compute flags from `snapshot_diff`:
+|                       add_column:
+|                         - diff["add"]["columns"] has any index >= 2 with a truthy 'name'
+|                         - AND index 1 NOT present (avoid full-create noise)
+|                       rename_column:
+|                         - any diff["update"]["columns"][idx]['name'] is truthy
+|                       drop_column:
+|                         - any diff["remove"]["columns"][idx]['name'] is truthy
+|                 |-- If NONE of the above are true:
+|                       - Print “No schema evolution changes detected; continuing.”
+|                       - Proceed to step 5 (or step 6 if mode == "diff").
+|                 |-- If ANY of the above are true (schema evolution intent detected):
+|                       - Print a pre-flight header with flags (add/rename/drop).
+|                       - Validate required Delta table properties from table_snapshot["table_properties"]:
+|                             * delta.columnMapping.mode = "name"
+|                             * delta.minReaderVersion   = "2"
+|                             * delta.minWriterVersion   = "5"
+|                       - If ANY required property missing/mismatched:
+|                             * Print explicit error, EXIT 2 (do NOT apply changes, do NOT audit).
+|                       - Else:
+|                             * Print success (“properties present; proceeding”).
+|           |-- 4.2) (Reserved) Other validations — currently a no-op.
+|
+|-- 5) DIFF-ONLY MODE QUICK EXIT
+|     |-- If mode == "diff":
+|           |-- Pretty-print the `snapshot_diff`.
+|           |-- EXIT 0 (no load, no audit).
+|
+|-- 6) LOAD CHANGES (apply/all)
+|     |-- Only if mode ∈ {"apply","all"} AND dry_run is False:
+|           |-- Print “APPLYING METADATA CHANGES”.
+|           |-- DatabricksTableLoader(snapshot_diff, spark, dry_run=False).run()
+|                 |-- If `add.columns` starts at 1 and no opposing sections → CREATE TABLE with all columns,
+|                     then post-create column comments/tags and table-level extras (owner, PK/UK, FKs, checks, tags).
+|                 |-- Otherwise → ALTER: iterate over {add/update/remove} sections and emit SQL accordingly
+|                     (comments/tags/checks/filters/properties/owner/etc.; columns handled per action).
+|
+|-- 7) AUDIT (only when there WERE changes)
+|     |-- If audit_log_table is not False:
+|           |-- If audit_log_table is True → default to "layker/resources/layker_audit.yaml".
+|           |-- audit_log_flow(
+|                 spark=spark,
+|                 env=env,
+|                 before_snapshot=table_snapshot,   # None on full create
+|                 differences=snapshot_diff,         # persisted as JSON in audit row
+|                 target_table_fq=fq,
+|                 yaml_path=yaml_path,
+|                 audit_table_yaml_path=audit_log_table,
+|                 run_id=None, notes=None
+|              )
+|              |-- Ensures audit table exists from its YAML (creates it via loader if missing).
+|              |-- Refresh target table if supported by the runtime; skip on serverless where REFRESH not allowed.
+|              |-- Capture AFTER snapshot.
+|              |-- Append one audit row with:
+|                   • change_id (UUID)
+|                   • run_id (optional)
+|                   • env
+|                   • yaml_path
+|                   • fqn
+|                   • change_category ("create" if before snapshot is None; else "update")
+|                   • change_key (per-table sequence):
+|                        - If CREATE:  "create-{n}"  (n = prior create count for this fqn + 1)
+|                        - If UPDATE:  "create-{max_create}~update-{m}"
+|                          (m = prior update count for this fqn + 1; max_create from this fqn’s history)
+|                   • differences (JSON; exactly the `snapshot_diff`)
+|                   • before_value (JSON; None on full create)
+|                   • after_value  (JSON)
+|                   • notes
+|                   • created_at/by, updated_at/by
+|     |-- Else:
+|           |-- Print “Audit logging not enabled; exiting script.”
+|
+|-- END: run_table_load
+|     |-- Normal completion after load/audit returns to caller.
+|     |-- Early, intentional exits:
+|           |-- EXIT 0 on: mode==validate, mode==diff, or no-op (no changes).
+|           |-- EXIT 2 on: schema-evolution pre-flight failure (missing required Delta props).
+|           |-- EXIT 130 on: KeyboardInterrupt.
+|           |-- EXIT 1 on: unexpected exception (after printing traceback).
+"""
+
 import os
 import sys
 from typing import Dict, Any, Optional
