@@ -1,29 +1,39 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "layker"
 version = "0.1.0"
-description = "Lakehouse-Aligned YAML Kit for Engineering Rules"
-authors = [
-  { name="Levi Gagne", email="levigagne0@gmail.com" }
-]
+description = "Lakehouse Aligned YAML Kit for Engineering Rules"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+authors = [{ name = "Levi Gagne", email = "levigagne0@gmail.com" }]
+license = { file = "LICENSE" }
+
+# Keep core deps light. PySpark is optional (provided on Databricks).
 dependencies = [
-  "pyspark>=3.3.0",
-  "pyyaml>=5.4",
-  "typing-extensions>=4.0"
+  "PyYAML>=6",
+  "typing-extensions>=4.0",
 ]
+
+[project.optional-dependencies]
+spark = ["pyspark>=3.5,<4"]
 
 [project.urls]
 Homepage = "https://github.com/Levi-Gagne/layker"
 Issues = "https://github.com/Levi-Gagne/layker/issues"
 
+[project.scripts]
+layker = "layker.main:cli_entry"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["layker*"]
 
+# Include packaged resources (e.g., audit YAMLs) inside the wheel
 [tool.setuptools.package-data]
-# This ensures all files in src/layker/resources/ are included
-"layker.resources" = ["*"]
+layker = ["resources/*.yaml"]
