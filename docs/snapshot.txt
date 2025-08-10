@@ -1,3 +1,8 @@
+Below are examples of snapshots used thorughout this project including: yaml/table snapshot & differnces snapshot
+
+
+
+Example of Yaml/Table Snapshot Dictionary:
 {
     "full_table_name": "",
     "catalog": "",
