@@ -24,6 +24,7 @@ from layker.utils.printer import (
     print_success,
     print_warning,
     print_error,
+    layker_banner,
 )
 
 def _has_changes(diff: Dict[str, Any]) -> bool:
@@ -34,6 +35,7 @@ def _has_changes(diff: Dict[str, Any]) -> bool:
             return True
     return False
 
+@laker_banner("Run Table Load")
 def run_table_load(
     yaml_path: str,
     dry_run: bool = False,
