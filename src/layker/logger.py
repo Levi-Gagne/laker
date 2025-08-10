@@ -9,8 +9,9 @@ from datetime import datetime
 from typing import Any, Dict, Optional, List
 
 import yaml
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 
 from layker.snapshot_yaml import validate_and_snapshot_yaml
 from layker.snapshot_table import TableSnapshot
@@ -55,6 +56,9 @@ class TableAuditLogger:
         # Load column order from YAML so no hard-coding lives here
         self.columns: List[str] = self._load_columns_from_yaml(audit_yaml_path)
 
+        # Build an explicit schema so Spark Connect doesn't need to infer types
+        self._schema: StructType = self._build_schema_from_yaml(self._audit_snapshot_yaml)
+
     # ------------------------
     # YAML helpers
     # ------------------------
@@ -78,6 +82,28 @@ class TableAuditLogger:
             if name:
                 names.append(name)
         return names
+
+    def _build_schema_from_yaml(self, snap_yaml: Dict[str, Any]) -> StructType:
+        """
+        Build a Spark StructType that matches the audit table YAML snapshot.
+        Defaults unknown/unsupported types to StringType (safe for JSON payloads).
+        """
+        type_map = {
+            "string": StringType(),
+            "timestamp": TimestampType(),
+        }
+
+        fields: List[StructField] = []
+        cols = snap_yaml.get("columns", {}) or {}
+        # YAML snapshot has string keys "1","2"...; sort by numeric index
+        for idx in sorted(map(int, cols.keys())):
+            c = cols[str(idx)]
+            name = c.get("name")
+            dt = (c.get("datatype") or "string").strip().lower()
+            nullable = bool(c.get("nullable", True))
+            spark_type = type_map.get(dt, StringType())
+            fields.append(StructField(name, spark_type, nullable))
+        return StructType(fields)
 
     # ------------------------
     # Formatting helpers
@@ -146,7 +172,7 @@ class TableAuditLogger:
     # ------------------------
     # Row construction
     # ------------------------
-    def _row(self, **kw) -> Row:
+    def _row(self, **kw) -> Dict[str, Any]:
         now = datetime.utcnow()
         before_val = self._format_snapshot(kw.get("before_value"))
         after_val = self._format_snapshot(kw.get("after_value"))
@@ -174,9 +200,8 @@ class TableAuditLogger:
             "updated_by": None,
         }
 
-        # Build ordered dict strictly per YAML-defined columns
-        ordered: Dict[str, Any] = {c: computed.get(c) for c in self.columns}
-        return Row(**ordered)
+        # Keep order defined by YAML columns
+        return {c: computed.get(c) for c in self.columns}
 
     # ------------------------
     # Public API
@@ -192,7 +217,7 @@ class TableAuditLogger:
         subject_name: Optional[str] = None,  # kept for compatibility; ignored
         notes: Optional[str] = None,
     ) -> None:
-        row = self._row(
+        row_dict = self._row(
             run_id=run_id,
             env=env,
             yaml_path=yaml_path,
@@ -201,7 +226,8 @@ class TableAuditLogger:
             after_value=after_value,
             notes=notes,
         )
-        df = self.spark.createDataFrame([row])
+        # Explicit schema avoids Spark Connect inference issues on serverless
+        df = self.spark.createDataFrame([row_dict], schema=self._schema)
         df.write.format("delta").mode("append").saveAsTable(self.log_table)
         print(f"[AUDIT] 1 row logged to {self.log_table}")
 

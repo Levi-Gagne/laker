@@ -2,6 +2,7 @@
 
 from typing import Tuple, List
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.utils import AnalysisException
 from layker.utils.color import Color
 
 def table_exists(spark: SparkSession, fully_qualified_table: str) -> bool:
@@ -15,15 +16,17 @@ def table_exists(spark: SparkSession, fully_qualified_table: str) -> bool:
         print(f"[ERROR] Exception in table_exists({fully_qualified_table}): {e}")
         return False
 
-def refresh_table(spark: SparkSession, fully_qualified_table: str) -> None:
-    """
-    Refresh the table metadata in the Spark catalog.
-    """
+def refresh_table(spark, fq: str) -> None:
     try:
-        spark.catalog.refreshTable(fully_qualified_table)
-        print(f"[REFRESH] Table {fully_qualified_table} refreshed.")
+        spark.sql(f"REFRESH TABLE {fq}")
     except Exception as e:
-        print(f"[REFRESH][ERROR] Could not refresh table {fully_qualified_table}: {e}")
+        msg = str(e)
+        # Serverless/Spark Connect blocks this statement
+        if "NOT_SUPPORTED_WITH_SERVERLESS" in msg.lower() or "serverless" in msg.lower():
+            # Just skip; the next DESCRIBE/SELECT will see the latest metadata
+            print(f"[REFRESH][WARN] Skipping REFRESH TABLE on serverless for {fq}.")
+            return
+        raise
 
 def parse_fully_qualified_table_name(fq_table: str) -> Tuple[str, str, str]:
     """

@@ -3,9 +3,9 @@
 import re
 from pathlib import Path
 from typing import Optional, Tuple, Any
-from pyspark.sql import SparkSession
 
 from layker.utils.paths import file_on_disk, resolve_resource_path, list_resource_files
+
 
 def validate_yaml_path(yaml_path: str) -> str:
     """
@@ -24,7 +24,7 @@ def validate_yaml_path(yaml_path: str) -> str:
             return resolved
         else:
             raise ValueError(f"yaml_path '{yaml_path}' found in resources but could not be resolved.")
-    
+
     # Otherwise, treat as disk path
     disk_path = file_on_disk(yaml_path)
     if disk_path and Path(disk_path).suffix.lower() in {".yml", ".yaml"}:
@@ -34,16 +34,6 @@ def validate_yaml_path(yaml_path: str) -> str:
         f"yaml_path '{yaml_path}' not found as a packaged resource or file on disk."
     )
 
-def validate_log_ddl(log_ddl: Optional[str]) -> Optional[str]:
-    """
-    Validates log_ddl as a .yml/.yaml file, if provided.
-    """
-    if not log_ddl:
-        return None
-    ld = Path(log_ddl)
-    if ld.suffix.lower() not in {".yml", ".yaml"}:
-        raise ValueError(f"log_ddl must end in .yml/.yaml, got {log_ddl!r}")
-    return str(ld)
 
 def validate_mode(mode: Optional[str]) -> str:
     """
@@ -58,6 +48,7 @@ def validate_mode(mode: Optional[str]) -> str:
         raise ValueError(f"mode must be one of {allowed}, got {mode!r}")
     return m
 
+
 def validate_env(env: Optional[str]) -> Optional[str]:
     """
     Validates env for allowed characters (alphanumeric or underscore).
@@ -71,12 +62,12 @@ def validate_env(env: Optional[str]) -> Optional[str]:
         )
     return e
 
+
 def validate_audit_log_table(audit_log_table: Any) -> Any:
     """
     Validates audit_log_table parameter. Accepts:
       - True, False, None
-      - str ending in .yml/.yaml
-      - str formatted as catalog.schema.table
+      - str ending in .yml/.yaml (path to the audit DDL YAML)
     Returns value as-is if valid.
     """
     if audit_log_table in (True, False, None):
@@ -85,31 +76,50 @@ def validate_audit_log_table(audit_log_table: Any) -> Any:
         a = audit_log_table.strip()
         if a.lower().endswith((".yml", ".yaml")):
             return a
-        elif re.fullmatch(r"[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+", a):
-            return a
         else:
             raise ValueError(
-                f"audit_log_table must be True, False, a .yml/.yaml path, or catalog.schema.table (got {audit_log_table!r})"
+                f"audit_log_table must be True, False, or a .yml/.yaml path (got {audit_log_table!r})"
             )
     raise ValueError(
-        f"audit_log_table must be True, False, a string path, or catalog.schema.table (got type {type(audit_log_table).__name__})"
+        f"audit_log_table must be True, False, or a .yml/.yaml path (got type {type(audit_log_table).__name__})"
     )
 
-def validate_spark(spark: Any) -> SparkSession:
+
+def validate_spark(spark: Any) -> Any:
     """
-    Validates spark parameter is a SparkSession.
+    Minimal, environment-agnostic check that `spark` is an ACTIVE session.
+    Works with classic SparkSession and Spark Connect.
     """
-    if not isinstance(spark, SparkSession):
-        raise ValueError(f"spark must be a pyspark.sql.SparkSession, got {type(spark).__name__}")
+    if spark is None:
+        raise ValueError("spark must not be None")
+
+    # must expose a .sql(...) we can call
+    sql_fn = getattr(spark, "sql", None)
+    if not callable(sql_fn):
+        raise ValueError("spark must expose a callable .sql(...) method")
+
+    # quick 'ping' query to ensure it's alive
+    try:
+        df = sql_fn("SELECT 1")
+        # Try a lightweight action; handle both classic and connect
+        if hasattr(df, "limit") and callable(getattr(df, "limit")):
+            df.limit(1).collect()
+        elif hasattr(df, "collect") and callable(getattr(df, "collect")):
+            df.collect()
+        else:
+            _ = getattr(df, "schema", None)
+    except Exception as e:
+        raise ValueError(f"spark session is not active/usable: {e.__class__.__name__}: {e}") from e
+
     return spark
+
 
 def validate_params(
     yaml_path: str,
-    log_ddl: Optional[str],
     mode: Optional[str],
     env: Optional[str],
     audit_log_table: Any,
-    spark: Any
+    spark: Any,
 ) -> Tuple[str, Optional[str], Any]:
     """
     Validates and normalizes all run_table_load parameters.
@@ -117,7 +127,6 @@ def validate_params(
     Raises ValueError on invalid input.
     """
     validate_yaml_path(yaml_path)
-    validate_log_ddl(log_ddl)
     m = validate_mode(mode)
     e = validate_env(env)
     a = validate_audit_log_table(audit_log_table)

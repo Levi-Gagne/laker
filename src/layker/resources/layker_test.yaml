@@ -3,7 +3,7 @@
 # ===========================
 
 catalog: dq_dev      # Required. If ends with '_', will append env (e.g., dq_dev_{env}). If not, used as is.
-schema: lmg_sandbox  # Required. Schema name in catalog.
+schema: layker  # Required. Schema name in catalog.
 table: layker_test   # Required. Table name.
 
 primary_key: [example_id]     # Required for DDL. Must match at least one column below.

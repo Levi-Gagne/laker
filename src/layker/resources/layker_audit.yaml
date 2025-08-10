@@ -1,20 +1,12 @@
 # src/layker/resources/layker_audit.yaml
 
 catalog: dq_dev
-schema: monitoring
-table: layker
+schema: layker
+table: layker_audit
 
 primary_key: [change_id]
 partitioned_by: []
 
-unique_keys:
-  - [change_id]
-
-foreign_keys: {}
-
-table_check_constraints: {}
-
-row_filters: {}
 
 tags:
   team: dataops
@@ -91,7 +83,7 @@ columns:
     name: change_key
     datatype: string
     nullable: false
-    comment: "Human-readable sequence key, e.g., 'create-1' or 'create-2~update-5'."
+    comment: "Human-readable sequence key, e.g., create-1 or create-2~update-5."
     active: true
 
   8:

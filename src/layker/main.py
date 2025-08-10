@@ -10,11 +10,11 @@ from layker.snapshot_yaml import validate_and_snapshot_yaml
 from layker.snapshot_table import TableSnapshot
 from layker.differences import generate_differences
 from layker.loader import DatabricksTableLoader
-from layker.logger import audit_log_flow  # one-call audit helper
+from layker.logger import audit_log_flow
 
 # --- Validators ---
 from layker.validators.params import validate_params
-from layker.validators.differences import validate_differences  # RENAMED unified controller
+from layker.validators.differences import validate_differences
 
 # --- Utils ---
 from layker.utils.spark import get_or_create_spark
@@ -28,19 +28,18 @@ from layker.utils.printer import (
 
 def run_table_load(
     yaml_path: str,
-    log_ddl: Optional[str] = None,
     dry_run: bool = False,
     spark: Optional[SparkSession] = None,
     env: Optional[str] = None,
     mode: str = "apply",
-    audit_log_table: Any = False,  # True (use default), False (disable), or str path
+    audit_log_table: Any = False,  # True (use default YAML), False (disable), or str path to YAML
 ) -> None:
     try:
         if spark is None:
             spark = get_or_create_spark()
 
         mode, env, audit_log_table = validate_params(
-            yaml_path, log_ddl, mode, env, audit_log_table, spark
+            yaml_path, mode, env, audit_log_table, spark
         )
 
         print(section_header("STEP 1/4: VALIDATING YAML"))
@@ -50,13 +49,14 @@ def run_table_load(
             print_success("YAML validation passed.")
             sys.exit(0)
 
-        print(section_header("STEP 2/4: TABLE EXISTENCE CHECK"))
+        print(section_header("STEP 2/5: TABLE SNAPSHOT"))
         # Build live table snapshot (None if table doesn't exist)
         table_snapshot = TableSnapshot(spark, fq).build_table_metadata_dict()
 
+        print(section_header("STEP 3/5: COMPUTE DIFFERENCES"))
         # Compute differences using YAML snapshot + table snapshot (None => full create)
         snapshot_diff = generate_differences(snapshot_yaml, table_snapshot)
-
+        print(f"Printing 'snapshot_diff': {snapshot_diff}")
         # If no changes, exit early
         if not snapshot_diff:
             print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
@@ -72,6 +72,7 @@ def run_table_load(
                     print(f"{Color.b}{Color.aqua_blue}{k}:{Color.ivory} {v}{Color.r}")
             sys.exit(0)
 
+        print(section_header("STEP 4/5: LOAD TABLE"))
         # Apply changes for apply/all (single path for both create/alter)
         if mode in ("apply", "all") and not dry_run:
             print(section_header("APPLYING METADATA CHANGES", color=Color.green))
@@ -79,10 +80,11 @@ def run_table_load(
 
             # --- Audit after the load (resolve parameter in-place) ---
             if audit_log_table is not False:
+                print(section_header("STEP 5/5: LOG TABLE UPDATE"))
                 if audit_log_table is True:
                     # Inline default path
-                    audit_log_table = "src/layker/resources/audit.yaml"
-                # else it's a user-supplied path string
+                    audit_log_table = "layker/resources/layker_audit.yaml"
+                # else it's a user-supplied YAML path string
 
                 audit_log_flow(
                     spark=spark,
@@ -124,7 +126,7 @@ def cli_entry():
     mode     = sys.argv[4] if len(sys.argv) > 4 else "apply"
     audit_log_table = sys.argv[5] if len(sys.argv) > 5 else False
     run_table_load(
-        yaml_path, log_ddl=None, dry_run=dry_run, env=env, mode=mode, audit_log_table=audit_log_table
+        yaml_path, dry_run=dry_run, env=env, mode=mode, audit_log_table=audit_log_table
     )
 
 if __name__ == "__main__":

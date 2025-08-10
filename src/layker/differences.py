@@ -313,7 +313,6 @@ def generate_differences(
     """
     # FULL CREATE: If table does not exist, return all YAML fields under 'add'
     if table_snapshot is None:
-        # You could filter out empty fields if you want, but generally you want everything needed to create.
         return {
             "full_table_name": yaml_snapshot.get("full_table_name", ""),
             "add": {k: v for k, v in yaml_snapshot.items() if k != "full_table_name"}
@@ -364,10 +363,15 @@ def generate_differences(
     diff_table_properties(yaml_snapshot, table_snapshot, diffs["add"])
     diff_columns(yaml_snapshot, table_snapshot, diffs["add"], diffs["update"], diffs["remove"])
 
-    # Clean up: only return keys that have values (don't return empty add/update/remove sections)
+    # Clean up: only keep non-empty sections
     out = {"full_table_name": diffs["full_table_name"]}
     for section in ["add", "update", "remove"]:
         filtered = {k: v for k, v in diffs[section].items() if v and (not isinstance(v, dict) or len(v))}
         if filtered:
             out[section] = filtered
+
+    # >>> IMPORTANT: if there are no changes at all, return {} so `if not snapshot_diff:` works
+    if not any(out.get(s) for s in ("add", "update", "remove")):
+        return {}
+
     return out
