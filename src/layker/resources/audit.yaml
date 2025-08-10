@@ -24,13 +24,12 @@ tags:
 
 owner: levi.gagne@claconnect.com
 
-
 comment: |
   **Table:** dq_dev.monitoring.layker_audit
 
   **Purpose:**  
   Audit log of all schema, table, and column changes performed by automated DDL workflows and ops.  
-  Each row represents a create, update, or delete event, with before/after values for auditability.
+  Each row represents a create or update event, with before/after values for auditability.
 
   **Governance and Retention:**  
   - Table is append only  
@@ -89,70 +88,55 @@ columns:
     active: true
 
   7:
-    name: change_type
+    name: change_key
     datatype: string
     nullable: false
-    comment: "create_table or update_table"
+    comment: "Human-readable sequence key, e.g., 'create-1' or 'create-2~update-5'."
     active: true
 
   8:
-    name: subject_type
-    datatype: string
-    nullable: false
-    comment: "Always 'table_description' in this setup."
-    allowed_values: [table_description]
-    active: true
-
-  9:
-    name: subject_name
-    datatype: string
-    nullable: false
-    comment: "Table name only."
-    active: true
-
-  10:
     name: before_value
     datatype: string
     nullable: true
     comment: "Full pre-change metadata as JSON."
     active: true
 
-  11:
+  9:
     name: after_value
     datatype: string
     nullable: true
     comment: "Full post-change metadata as JSON."
     active: true
 
-  12:
+  10:
     name: notes
     datatype: string
     nullable: true
     comment: "Optional notes/context."
     active: true
 
-  13:
+  11:
     name: created_at
     datatype: timestamp
     nullable: false
     comment: "When this log row was created (UTC, required)."
     active: true
 
-  14:
+  12:
     name: created_by
     datatype: string
     nullable: false
     comment: "Who created this log row (user or service principal, required)."
     active: true
 
-  15:
+  13:
     name: updated_at
     datatype: timestamp
     nullable: true
     comment: "When this log row was last updated (nullable if never updated)."
     active: true
 
-  16:
+  14:
     name: updated_by
     datatype: string
     nullable: true
