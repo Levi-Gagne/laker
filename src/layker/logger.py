@@ -34,6 +34,7 @@ AUDIT_LOG_DOC: Dict[str, str] = {
         "and m counts updates since that create. Guaranteed unique per (fqn, change_key)."
     ),
     "before_value": "JSON string (pretty) of pre-change metadata; NULL for create.",
+    "differences": "JSON string (pretty) of the diff dictionary that was applied.",
     "after_value": "JSON string (pretty) of post-change metadata.",
     "notes": "Optional free-text context.",
     "created_at": "UTC timestamp when the row is written.",
@@ -131,6 +132,11 @@ class TableAuditLogger:
     # ------------------------
     # Formatting helpers
     # ------------------------
+    def _format_json(self, obj: Any) -> Optional[str]:
+        if obj is None:
+            return None
+        return json.dumps(obj, sort_keys=True, indent=2, default=str)  # pretty JSON
+
     def _format_snapshot(self, snap: Any) -> Optional[str]:
         if snap is None:
             return None
@@ -202,14 +208,12 @@ class TableAuditLogger:
             try:
                 return df.where(F.col("change_key") == key).limit(1).count() > 0
             except Exception:
-                # Fallback if count not available in environment
                 rows = df.where(F.col("change_key") == key).limit(1).collect()
                 return len(rows) > 0
 
         if change_category == "create":
             c = _max_create_num(all_for_table) + 1
             candidate = f"create-{c}"
-            # Probe uniqueness
             while _exists_key(all_for_table, candidate):
                 c += 1
                 candidate = f"create-{c}"
@@ -218,11 +222,9 @@ class TableAuditLogger:
         # update
         current_c = _max_create_num(all_for_table)
         if current_c <= 0:
-            # No prior create recorded; start at 1 for readability.
             current_c = 1
         m = _max_update_num_for_create(all_for_table, current_c) + 1
         candidate = f"create-{current_c}~update-{m}"
-        # Probe uniqueness
         while _exists_key(all_for_table, candidate):
             m += 1
             candidate = f"create-{current_c}~update-{m}"
@@ -234,16 +236,17 @@ class TableAuditLogger:
     def _row(self, **kw) -> Dict[str, Any]:
         now = datetime.utcnow()
         before_obj = kw.get("before_value")
+        diff_obj = kw.get("differences")
         after_obj = kw.get("after_value")
 
         before_val = self._format_snapshot(before_obj)
+        diff_val = self._format_json(diff_obj)  # pretty JSON for diffs
         after_val = self._format_snapshot(after_obj)
 
         env_norm = self._normalized_env(kw.get("env"))
         fqn = kw.get("fqn")
 
         change_category = "create" if before_val is None else "update"
-        # Sanity: CREATE rows should always have None BEFORE
         if change_category == "create" and before_obj is not None:
             print("[AUDIT][WARN] CREATE row but BEFORE snapshot is not None; proceeding.")
 
@@ -256,8 +259,9 @@ class TableAuditLogger:
             "yaml_path": kw.get("yaml_path"),
             "fqn": fqn,
             "change_category": change_category,
-            "change_key": change_key,  # human-readable sequence key
+            "change_key": change_key,
             "before_value": before_val,
+            "differences": diff_val,
             "after_value": after_val,
             "notes": kw.get("notes"),
             "created_at": now,
@@ -279,6 +283,7 @@ class TableAuditLogger:
         yaml_path: Optional[str],
         fqn: str,
         before_value: Any,
+        differences: Any,
         after_value: Any,
         subject_name: Optional[str] = None,  # kept for compatibility; ignored
         notes: Optional[str] = None,
@@ -289,10 +294,10 @@ class TableAuditLogger:
             yaml_path=yaml_path,
             fqn=fqn,
             before_value=before_value,
+            differences=differences,
             after_value=after_value,
             notes=notes,
         )
-        # Explicit schema avoids Spark Connect inference issues on serverless
         df = self.spark.createDataFrame([row_dict], schema=self._schema)
         df.write.format("delta").mode("append").saveAsTable(self.log_table)
         print(f"[AUDIT] 1 row logged to {self.log_table}")
@@ -305,6 +310,7 @@ def audit_log_flow(
     spark: SparkSession,
     env: str,
     before_snapshot: Optional[Dict[str, Any]],
+    differences: Dict[str, Any],
     target_table_fq: str,
     yaml_path: Optional[str],
     audit_table_yaml_path: str,
@@ -324,7 +330,6 @@ def audit_log_flow(
         )
         if not table_exists(spark, audit_fq):
             print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
-            # Use diff generator + loader to create from snapshot YAML
             diff = generate_differences(audit_snapshot_yaml, table_snapshot=None)
             DatabricksTableLoader(diff, spark, dry_run=False).run()
         return audit_fq
@@ -332,11 +337,11 @@ def audit_log_flow(
     # 1) Ensure the audit table exists (scoped to this flow)
     _ensure_audit_table_exists_local()
 
-    # 2) Refresh target table (no-op/skip on serverless inside refresh_table) and take AFTER snapshot
+    # 2) Refresh target table (skip on serverless inside refresh_table) and take AFTER snapshot
     refresh_table(spark, target_table_fq)
     after_snapshot = TableSnapshot(spark, target_table_fq).build_table_metadata_dict()
 
-    # 3) Write the audit log row (BEFORE = provided snapshot, AFTER = freshly captured)
+    # 3) Write the audit log row
     actor = os.environ.get("USER") or getpass.getuser() or "AdminUser"
     logger = TableAuditLogger(
         spark=spark,
@@ -351,6 +356,7 @@ def audit_log_flow(
         yaml_path=yaml_path,
         fqn=target_table_fq,
         before_value=before_snapshot,
+        differences=differences,
         after_value=after_snapshot,
         subject_name=None,  # ignored by logger
         notes=notes,
