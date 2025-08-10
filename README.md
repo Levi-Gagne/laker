@@ -1,227 +1,224 @@
-
 <!-- README.md (Layker) -->
 
-<div align="center" style="margin-bottom: 24px;">
-  <span style="font-size: 48px; line-height: 1; vertical-align: middle;">🐟</span>
-  <span style="font-size: 48px; font-weight: bold; letter-spacing: 2px; color: #2186C4; vertical-align: middle;">Layker</span>
-  <span style="font-size: 48px; line-height: 1; vertical-align: middle;">🐟</span>
+<div align="center" style="margin-bottom: 18px;">
+  <span style="font-size: 44px; line-height: 1; vertical-align: middle;">🐟</span>
+  <span style="font-size: 44px; font-weight: bold; letter-spacing: 1.5px; color: #2186C4; vertical-align: middle;">Layker</span>
+  <span style="font-size: 44px; line-height: 1; vertical-align: middle;">🐟</span>
   <br>
-  <span style="font-size: 18px; color: #444; font-family: monospace; letter-spacing: 1px;">
-    <b>L</b>akehouse-<b>A</b>ligned <b>Y</b>AML <b>K</b>it for <b>E</b>ngineering <b>R</b>ules
+  <span style="font-size: 16px; color: #444; font-family: monospace; letter-spacing: 0.5px;">
+    <b>L</b>akehouse‑<b>A</b>ligned <b>Y</b>AML <b>K</b>it for <b>E</b>ngineering <b>R</b>ules
   </span>
 </div>
 
-<hr style="border: 0; border-top: 1.5px solid #2186C4; margin-bottom: 18px;">
+---
 
-<div style="font-size: 20px; color: #3B8C57; font-weight: bold;">Declarative Table Metadata Control for Databricks & Spark</div>
-<p style="color: #444;">
-  Layker gives you a <b>YAML-driven, audit-friendly workflow</b> for evolving table schemas, properties, tags, and constraints—without the manual SQL, and without surprises.
-  <br>
-  <b>Everything is validated. Every change is logged.</b> Know exactly what’s changing, every time.
-</p>
+Declarative **table metadata control** for Databricks & Spark.  
+Layker turns a YAML spec into **safe, validated DDL** with a built‑in **audit log**.  
+If nothing needs to change, Layker exits cleanly. If something must change, you’ll see it first.
 
 ---
 
-## <span style="color: #2186C4;">What Is Layker?</span>
+## What is Layker?
 
-Layker is a modern Python package for managing <b>table DDL, metadata, and audit logs</b> in Databricks (or any Spark 3+ platform), using just a YAML file as your single source of truth.
+Layker is a Python package for managing **table DDL, metadata, and auditing** with a single YAML file as the source of truth.
 
-<table>
-  <tr>
-    <td><b>Declarative</b></td>
-    <td>Just write your schema and metadata in YAML.</td>
-  </tr>
-  <tr>
-    <td><b>Diff-First</b></td>
-    <td>See exactly what will change before you touch production.</td>
-  </tr>
-  <tr>
-    <td><b>Safe</b></td>
-    <td>Schema evolution is validated, logged, and reversible. No silent data loss.</td>
-  </tr>
-  <tr>
-    <td><b>Auditable</b></td>
-    <td>Every change is tracked in a dedicated audit log table.</td>
-  </tr>
-</table>
+**Highlights**
+- **Declarative** – author schemas, tags, constraints, and properties in YAML.
+- **Diff‑first** – Layker computes a diff against the live table; “no diff” = no work.
+- **Safe evolution** – add/rename/drop column intents are detected and gated by required Delta properties.
+- **Auditable** – every applied change is logged with **before/after** snapshots and a concise **differences** dictionary.
+- **Serverless‑friendly** – gracefully skips `REFRESH TABLE` on serverless (prints a warning).
 
 ---
 
-## <span style="color: #3B8C57;">How It Works</span>
+## Installation
 
-<ol>
-  <li><b>Write your YAML spec</b> – see <code>src/layker/config/example.yaml</code>.</li>
-  <li><b>Run Layker</b> (from Python or CLI) with your YAML and environment.</li>
-  <li>
-    <b>Layker validates</b> your YAML and logic.<br>
-    <span style="color: #2186C4;">If invalid:</span> fails fast, tells you why.<br>
-    <span style="color: #3B8C57;">If valid:</span> checks if table exists.
-  </li>
-  <li>
-    <b>Table does not exist?</b><br>
-    &nbsp;&nbsp;→ <span style="color: #2186C4;">Creates table exactly as described.</span>
-  </li>
-  <li>
-    <b>Table exists?</b><br>
-    &nbsp;&nbsp;→ Compares YAML spec to live table.<br>
-    &nbsp;&nbsp;→ If no differences: <span style="color: #2186C4;">exits, nothing to do.</span><br>
-    &nbsp;&nbsp;→ If differences: <span style="color: #3B8C57;">prints proposed changes, validates for schema evolution, applies updates.</span>
-  </li>
-  <li>
-    <b>All actions are logged</b> to an audit table (see <code>changelog/load_table_log.yaml</code>).
-  </li>
-</ol>
-
----
-
-## <span style="color: #2186C4;">Quickstart</span>
-
-<b>1. Install</b>
+Stable:
 ```bash
 pip install layker
 ```
-or, for the latest dev build:
+
+Latest (main):
 ```bash
-pip install git+https://github.com/Levi-Gagne/layker.git
+pip install "git+https://github.com/Levi-Gagne/layker.git"
 ```
 
-<b>2. Write your YAML</b>
+Python 3.8+ and Spark 3.3+ are recommended.
 
-See <code>src/layker/config/example.yaml</code>:
+---
 
+## Quickstart
+
+### 1) Author a YAML spec
+Minimal example (save as `src/layker/resources/example.yaml`):
 ```yaml
 catalog: dq_dev
-schema: my_schema
-table: customer_dim
+schema: lmg_sandbox
+table: layker_test
+
 columns:
   1:
     name: id
     datatype: bigint
     nullable: false
+    active: true
   2:
     name: name
     datatype: string
-    nullable: false
-properties:
-  comment: Customer master table
-  table_properties:
-    delta.enableChangeDataFeed: true
+    nullable: true
+    active: true
+
+table_comment: Demo table managed by Layker
+table_properties:
+  delta.columnMapping.mode: "name"
+  delta.minReaderVersion: "2"
+  delta.minWriterVersion: "5"
+
 primary_key: [id]
 tags:
-  domain: core
+  domain: demo
+  owner: team-data
 ```
 
-<b>3. Sync your table (Python or CLI)</b>
-
-Python:
+### 2) Sync from Python
 ```python
+from pyspark.sql import SparkSession
 from layker.main import run_table_load
 
+spark = SparkSession.builder.appName("layker").getOrCreate()
+
 run_table_load(
-    yaml_path="src/layker/config/example.yaml",
-    env="prod",
+    yaml_path="src/layker/resources/example.yaml",
+    env="prd",
     dry_run=False,
-    mode="apply"
+    mode="all",                 # validate | diff | apply | all
+    audit_log_table=True        # True=default audit YAML, False=disable, or str path to an audit YAML
 )
 ```
 
-CLI:
+### 3) Or via CLI
 ```bash
-python -m layker.main src/layker/config/example.yaml prod false apply
+python -m layker src/layker/resources/example.yaml prd false all true
 ```
----
 
-## <span style="color: #3B8C57;">Repo Structure</span>
-
-<pre>
-layker/
-├── src/
-│   └── layker/
-│       ├── main.py
-│       ├── yaml_reader.py
-│       ├── validator.py
-│       ├── sanitizer.py
-│       ├── introspector.py
-│       ├── differences.py
-│       ├── differences_logger.py
-│       ├── loader.py
-│       ├── color.py
-│       ├── dry_run.py
-│       ├── retry.py
-│       ├── config/
-│       │   └── example.yaml
-│       └── changelog/
-│           ├── loader_logger.py
-│           └── load_table_log.yaml
-├── tests/
-├── README.md
-├── FLOW.txt
-├── TREE.txt
-</pre>
+> When `audit_log_table=True`, Layker uses the packaged default:
+> `layker/resources/layker_audit.yaml`.  
+> You can also pass a custom YAML path. Either way, the **YAML defines the audit table’s location**.
 
 ---
 
-## <span style="color: #2186C4;">Core Modules</span>
+## How it works (at a glance)
 
-<table>
-  <tr>
-    <td><b>main.py</b></td>
-    <td>Entrypoint for CLI and import. Runs end-to-end logic.</td>
-  </tr>
-  <tr>
-    <td><b>yaml_reader.py</b></td>
-    <td>Loads and exposes all YAML values as attributes.</td>
-  </tr>
-  <tr>
-    <td><b>validator.py</b></td>
-    <td>Checks YAML validity, required fields, and business logic.</td>
-  </tr>
-  <tr>
-    <td><b>sanitizer.py</b></td>
-    <td>Normalizes YAML and table metadata for reliable diffing.</td>
-  </tr>
-  <tr>
-    <td><b>introspector.py</b></td>
-    <td>Pulls table metadata from Spark/Databricks.</td>
-  </tr>
-  <tr>
-    <td><b>differences.py</b></td>
-    <td>Computes difference between YAML spec and actual table.</td>
-  </tr>
-  <tr>
-    <td><b>loader.py</b></td>
-    <td>Applies table DDL (create/alter) based on diff.</td>
-  </tr>
-  <tr>
-    <td><b>changelog/loader_logger.py</b></td>
-    <td>Writes all changes to the audit table (config in <code>load_table_log.yaml</code>).</td>
-  </tr>
-</table>
+1. **Validate YAML** → fast fail with exact reasons, or proceed.
+2. **Snapshot live table** (if it exists).
+3. **Compute differences** between YAML snapshot and table snapshot.
+   - If **no changes** (i.e., the diff contains only `full_table_name`), **exit** with a success message and **no audit row** is written.
+4. **Validate differences** (schema‑evolution preflight):
+   - Detects **add/rename/drop** column intents.
+   - Requires Delta properties for evolution:
+     - `delta.columnMapping.mode = name`
+     - `delta.minReaderVersion = 2`
+     - `delta.minWriterVersion = 5`
+   - On missing requirements, prints details and exits.
+5. **Apply changes** (create/alter) using generated SQL.
+6. **Audit** (only if changes were applied and auditing is enabled):
+   - Writes a row containing:
+     - `before_value` (JSON), `differences` (JSON), `after_value` (JSON)
+     - `change_category` (`create` or `update`)
+     - `change_key` (human‑readable sequence per table, see below)
+     - `env`, `yaml_path`, `fqn`, timestamps, actor, etc.
 
 ---
 
-## <span style="color: #3B8C57;">FAQ</span>
+## Audit log model
 
-<b>What does Layker support?</b>
-<ul>
-  <li>YAML-driven creation and evolution of Spark/Delta tables (Databricks-ready)</li>
-  <li>Automatic audit logging of all schema and property changes</li>
-  <li>Safe, detailed validation and diffing before any change</li>
-</ul>
+The default audit YAML (`layker/resources/layker_audit.yaml`) defines these columns (in order):
 
-<b>Can I use this outside Databricks?</b>
-<ul>
-  <li>Yes. It works with any Spark 3.x cluster, but audit logging and some table features are Delta-specific.</li>
-</ul>
+- **change_id** – UUID per row
+- **run_id** – optional job/run identifier
+- **env** – environment/catalog prefix
+- **yaml_path** – the source YAML path that initiated the change
+- **fqn** – fully qualified table name
+- **change_category** – `create` or `update` (based on whether a “before” snapshot was present)
+- **change_key** – readable sequence per table:
+  - First ever create: `create-1`
+  - Subsequent updates on that lineage: `create-1~update-1`, `create-1~update-2`, …
+  - If the table is later dropped & re‑created: the next lineage becomes `create-2`, etc.
+- **before_value** – JSON snapshot before change (may be null on first create)
+- **differences** – JSON diff dict that was applied
+- **after_value** – JSON snapshot after change
+- **notes** – optional free text
+- **created_at / created_by / updated_at / updated_by**
 
-<b>What if my YAML or table is invalid?</b>
-<ul>
-  <li>Layker always fails fast, tells you exactly why, and never half-applies a change.</li>
-</ul>
+Uniqueness expectation: `(fqn, change_key)` is effectively unique over time.
 
 ---
 
-<div align="center" style="color: #2186C4; margin-top: 36px; font-weight: bold;">
-  Built for engineers, by engineers. <br>
-  <span style="font-size: 20px;">🐟&nbsp;LAYKER&nbsp;🐟</span>
+## Modes & parameters
+
+- **mode**: `validate` | `diff` | `apply` | `all`
+  - `validate`: only YAML validation (exits on success)
+  - `diff`: prints proposed changes and exits
+  - `apply`: applies changes only
+  - `all`: validate → diff → apply → audit
+- **audit_log_table**:
+  - `False` – disable auditing
+  - `True` – use default `layker/resources/layker_audit.yaml`
+  - `str` – path to a custom audit YAML (the YAML governs the destination table)
+- **No‑op safety**: if there are **no changes**, Layker exits early and **skips audit**.
+
+---
+
+## Notes on serverless
+
+Databricks serverless does **not** support `REFRESH TABLE`.  
+Layker detects this and prints a warning; the rest of the flow continues.
+
+---
+
+## Repository layout (typical)
+
+```
+src/
+  layker/
+    __init__.py
+    __main__.py
+    main.py
+    differences.py
+    loader.py
+    logger.py
+    snapshot_yaml.py
+    snapshot_table.py
+    resources/
+      layker_audit.yaml
+    utils/
+      color.py
+      printer.py
+      spark.py
+      timer.py
+      paths.py
+      table.py
+    validators/
+      params.py
+      differences.py
+```
+
+---
+
+## Troubleshooting
+
+- **Spark Connect / serverless**: Layker avoids schema inference issues by using explicit schemas when writing the audit row.
+- **Single quotes in comments**: Layker sanitizes YAML comments to avoid SQL quoting errors.
+- **No changes but I still see output**: A diff containing only `full_table_name` means **no change**; Layker exits early with a success message and writes no audit row.
+
+---
+
+## Contributing & License
+
+PRs and issues welcome.  
+License: see `LICENSE` in the repo.
+
+<div align="center" style="margin-top: 18px;">
+  <span style="font-size: 18px; color: #2186C4; font-weight: bold;">Built for engineers, by engineers.</span><br>
+  <span style="font-size: 18px;">🐟&nbsp;LAYKER&nbsp;🐟</span>
 </div>
