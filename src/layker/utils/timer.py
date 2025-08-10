@@ -1,4 +1,4 @@
-# src/layker/utils/time.py
+# src/layker/utils/timer.py
 
 def format_elapsed(seconds: float) -> str:
     """
