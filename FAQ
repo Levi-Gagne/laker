@@ -1,159 +1,112 @@
-==========================
-FREQUENTLY ASKED QUESTIONS
-==========================
+LAYKER — Frequently Asked Questions
+======================================================
 
-Table of Contents
------------------
-0. VERSION, COMPATIBILITY, AND ENVIRONMENT
-   0.1 What Python and Spark versions does this support?
+This document presents the FAQ as an indented, table-of-contents style outline
+so you can scan topics quickly and find the answer you need.
+
+LEGEND
+------
+• Top-level sections are numbered 0..5
+• Subsections use dotted numbering (e.g., 1.3)
+• Bullets under each item summarize the key points
+• Indentation indicates hierarchy
+
+0. VERSION, COMPATIBILITY & ENVIRONMENT
+   0.1 What Python and Spark versions are supported?
+       - Python: 3.9+ (tested primarily on 3.10/3.11)
+       - Spark: 3.3+ (Databricks Runtime 12.x+ or equivalent)
+       - Core deps: pyspark, pyyaml
    0.2 Can I run this outside Databricks?
-1. USAGE & ORCHESTRATION
-   1.1 How do I use this code?
-   1.2 Can I use this with multiple tables or YAMLs?
-   1.3 Where should this tool be used—ETL, ad hoc, or other?
-   1.4 How does environment/config passing work?
-   1.5 Does this tool ever touch actual table data?
-   1.6 Can I preview changes before applying?
-   1.7 What if I stop using the tool?
-2. YAML STORAGE & MANAGEMENT
-   2.1 Where should I store my YAML files?
-   2.2 Can I put YAML in a notebook cell?
-   2.3 How should I organize YAML for different environments?
-3. YAML FORMATTING & REFERENCE
-   3.1 What are the minimum YAML requirements?
-   3.2 What are the formatting/naming rules for constraints, tags, keys?
-   3.3 Is there a YAML example for all options?
-   3.4 How do foreign keys work in this YAML?
-4. SUPPORTED & UNSUPPORTED CHANGES
-   4.1 What changes are supported in schema evolution?
-   4.2 What’s NOT supported? (type changes, reordering, etc.)
-   4.3 What actually happens with remove/re-add columns in Delta?
-   4.4 What about changes to constraints, tags, properties?
-   4.5 What happens if I try to change a column type?
-5. METADATA USE CASES & ADVANCED REFERENCE
-   5.1 Can I use this YAML as a config/reference file?
-   5.2 How can I reference YAML-defined keys, tags, or FKs in other code?
-   5.3 Can this tool help other ETL jobs manage dependencies?
-
---------------------------------------------------------------------------------
-
-0. VERSION, COMPATIBILITY, AND ENVIRONMENT
-------------------------------------------
-
-0.1 WHAT PYTHON AND SPARK VERSIONS DOES THIS SUPPORT?
-- Python 3.9+  
-- Tested on Databricks Runtime 12.x and above (or equivalent Spark 3.3+)
-- Requires `pyspark` and `pyyaml`
-
-0.2 CAN I RUN THIS OUTSIDE DATABRICKS?
-- No. This tool is designed for Databricks Lakehouse.  
-- It relies on a live SparkSession and Unity Catalog/Delta features.  
-- The codebase is generic enough to be portable, but no support is provided for running outside Databricks at this time.
-
---------------------------------------------------------------------------------
+       - Yes, on any Spark 3.x cluster.
+       - Some features assume Delta/Unity Catalog (e.g., REFRESH, Delta properties).
+       - Serverless caveat: REFRESH TABLE is not supported on serverless compute.
 
 1. USAGE & ORCHESTRATION
-------------------------
-
-1.1 HOW DO I USE THIS CODE?
-Run:
-    python -m layker path/to/your_config.yaml
-This calls the main function, loading YAML and applying schema/metadata changes.
-
-1.2 CAN I USE THIS WITH MULTIPLE TABLES OR YAMLS?
-Yes—loop over YAML files in Python or as job steps. Each YAML handles one table; orchestrate as needed.
-
-1.3 WHERE SHOULD THIS TOOL BE USED—ETL, AD HOC, OR OTHER?
-Run as part of your ETL job (after writing), as an ad hoc notebook/job, or as a metadata enforcement step.
-
-1.4 HOW DOES ENVIRONMENT/CONFIG PASSING WORK?
-YAML supports variable substitution (e.g., dq_dev_{env}). Pass parameters from job context, environment variables, or script arguments.
-
-1.5 DOES THIS TOOL EVER TOUCH ACTUAL TABLE DATA?
-No—it only manages schema and metadata (columns, tags, comments, constraints). Data is untouched except when a column is removed: it becomes invisible, but data remains until VACUUM.
-
-1.6 CAN I PREVIEW CHANGES BEFORE APPLYING?
-Yes, enable the `dry_run` option to see a full list of proposed DDL/metadata changes.
-
-1.7 WHAT IF I STOP USING THE TOOL?
-Your tables remain as-is, with no dependency or lock-in.
-
---------------------------------------------------------------------------------
+   1.1 How do I run Layker?
+       - Python:
+         > from layker.main import run_table_load
+           run_table_load(yaml_path="path/to/table.yaml", env="prd", mode="apply")
+       - CLI:
+         > python -m layker path/to/table.yaml prd false apply [audit_log_table]
+   1.2 Which modes exist and when do they exit?
+       - validate  : validate YAML then exit (no cluster changes).
+       - diff      : compute/print differences then exit (no apply).
+       - apply/all : compute/apply differences; logs an audit row only on change.
+   1.3 Does the tool write audit logs when there is no change?
+       - No. We detect “no-op” diffs early and exit with a success message.
+   1.4 How is the audit log table chosen?
+       - Parameter `audit_log_table` accepts:
+         • True  -> uses default YAML at: layker/resources/layker_audit.yaml
+         • False -> disables audit logging
+         • str   -> path to a YAML that defines the audit table
+       - The YAML defines the table FQN and schema (Delta).
+   1.5 What does the audit log row contain?
+       - Keys: change_id, run_id, env, yaml_path, fqn, change_category (create/update),
+         change_key (e.g., create-1 or create-2~update-5), differences (JSON),
+         before_value (JSON), after_value (JSON), notes, created_at/by, updated_at/by
+       - change_key is unique per (fqn, change_key) sequence and increments by table.
+   1.6 Where can this run in a workflow?
+       - Ad hoc notebook, scheduled job step, or after ETL writes to enforce metadata.
+   1.7 Does the tool ever touch table data?
+       - No. Only schema/metadata (DDL). Dropped columns are hidden; data persists
+         in Delta until vacuumed (standard Delta semantics).
 
 2. YAML STORAGE & MANAGEMENT
-----------------------------
+   2.1 Where should I store YAML files?
+       - Recommended: in git with PR review (auditability).
+       - Alternative: in a Databricks volume (operational agility).
+   2.2 Can YAML live inside a notebook cell?
+       - Discouraged for maintainability; use files for version control and reviews.
+   2.3 How should I handle environments?
+       - Use per-env files or suffix patterns (e.g., catalog endswith '_' + env).
+       - Pass env to `run_table_load(..., env="dev")` to resolve catalog.
 
-2.1 WHERE SHOULD I STORE MY YAML FILES?
-- **Recommended:** Store YAML in your code repository (git) for auditability, change tracking, and pull request review.
-    - *Advantages*: History, collaboration, approvals.
-    - *Disadvantages*: Changes require a PR, which can slow down rapid metadata edits.
-- **Alternative:** Store YAML in a Databricks volume if available.  
-    - *Advantages*: Immediate updates, no PR needed. Good for operational agility.
-    - *Disadvantages*: No git/version history; changes are not automatically reviewed.
-- Both are valid; pick based on your workflow. Always keep YAML as a **separate file** (not in notebook cells).
+3. YAML FORMAT & VALIDATION
+   3.1 Minimum required fields
+       - Top-level: catalog, schema, table, columns
+       - Columns indexed 1..N (continuous); each column needs name, datatype, nullable, active
+   3.2 Additional supported metadata
+       - primary_key, unique_keys, foreign_keys, partitioned_by
+       - table_comment, table_properties, table_check_constraints, row_filters, tags, owner
+   3.3 Comment & value sanitization
+       - Column comments cannot include newline, carriage return, tab, or single quotes.
+       - Text is sanitized to keep DDL safe and readable.
+   3.4 Validation outcomes
+       - Fails fast with a clear list of problems; exits before any changes.
+       - On success, Layker builds a sanitized YAML snapshot and a full-table FQN.
 
-2.2 CAN I PUT YAML IN A NOTEBOOK CELL?
-- Strongly discouraged. While technically possible with small changes, storing YAML in a cell makes code harder to maintain, version, and audit. Use files.
+4. DIFFERENCES & SCHEMA EVOLUTION
+   4.1 What is considered a “change”?
+       - The generated diff returns at most: { full_table_name, add, update, remove }.
+       - If add/update/remove all empty → no change (Layker exits without logging).
+   4.2 What schema evolution operations are detected?
+       - Add column   : add.columns has an index ≥ 2 with a truthy “name”, and index 1 is not present.
+       - Rename column: update.columns[idx].name is truthy.
+       - Drop column  : remove.columns[idx].name is truthy.
+       - Full create  : table_snapshot is None (not treated as evolution).
+   4.3 What validation runs before applying evolution?
+       - validate_differences() calls a pre-flight that checks required Delta properties:
+         • delta.columnMapping.mode = name
+         • delta.minReaderVersion   = 2
+         • delta.minWriterVersion   = 5
+       - If missing: prints an error and exits (no partial updates).
+   4.4 What’s unsupported?
+       - Changing column types, reordering columns, or mixing complex composite ops.
+       - For a type change, create a new table or reload data with the new schema.
 
-2.3 HOW SHOULD I ORGANIZE YAML FOR DIFFERENT ENVIRONMENTS?
-- Use per-environment YAML files, or parametrize the `catalog`/`schema` fields (e.g., `dq_dev_{env}`).
-- Organize files by environment, table, or project as needed.
+5. AUDIT LOG DETAILS
+   5.1 When do we write to the audit log?
+       - Only when a diff exists and we apply it (apply/all modes).
+   5.2 What is change_key and how is it enforced?
+       - Per-table sequence:
+         • CREATE:  create-{n}
+         • UPDATE:  create-{max_create}~update-{m}
+       - Computed by counting prior rows for the same FQN; unique within (fqn, change_key).
+   5.3 What JSON fields are stored?
+       - differences: snapshot diff (cleaned dict); before_value and after_value are
+         pretty-printed JSON snapshots of the table metadata.
+   5.4 Any serverless caveats?
+       - REFRESH TABLE is skipped with a warning on serverless compute since it is
+         not supported. Snapshots are still taken.
 
---------------------------------------------------------------------------------
-
-3. YAML FORMATTING & REFERENCE
-------------------------------
-
-3.1 WHAT ARE THE MINIMUM YAML REQUIREMENTS?
-You must specify `catalog`, `schema`, and `table`. All columns are listed under numerically indexed keys (`1:`, `2:`, ...). Each column must define `name` and `datatype`.
-
-3.2 WHAT ARE THE FORMATTING/NAMING RULES FOR CONSTRAINTS, TAGS, KEYS?
-- **Constraints:** Keys like `constraint_1`, `constraint_2`—each must have unique `name` and `expression`.
-- **Tags:** Tags are dictionaries (`tags: { key: value }`); keys must be unique.
-- **Foreign/unique/primary keys:** Must use required keys; foreign keys are informational only.
-
-3.3 IS THERE A YAML EXAMPLE FOR ALL OPTIONS?
-Yes—see `example.yaml` in the repo for every supported field and annotation.
-
-3.4 HOW DO FOREIGN KEYS WORK IN THIS YAML?
-Foreign keys are captured for reference only; Databricks does not enforce them. They provide metadata value for data modeling or for extracting config information programmatically.
-
---------------------------------------------------------------------------------
-
-4. SUPPORTED & UNSUPPORTED CHANGES
-----------------------------------
-
-4.1 WHAT CHANGES ARE SUPPORTED IN SCHEMA EVOLUTION?
-- **Add column:** Supported (appended at end).
-- **Remove column:** Supported (column becomes invisible; data stays in Delta files).
-- **Rename column:** Supported (by position and type only; not by label alone).
-
-4.2 WHAT’S NOT SUPPORTED?
-- **Change column type:** Not supported by Delta/Databricks schema evolution. To change type, create a new table or reload the data.
-- **Reorder columns:** Not supported. Columns are compared by position; reordering is not possible.
-- **Composite operations:** (e.g., both rename and type change at once) are not supported.
-
-4.3 WHAT HAPPENS IF I REMOVE AND THEN RE-ADD A COLUMN?
-If you remove a column, it becomes invisible. If you re-add the column with the same name and type, and VACUUM hasn’t run, old data is visible again for old records; new records written without the column will show null for that field.
-
-4.4 WHAT ABOUT CHANGES TO CONSTRAINTS, TAGS, PROPERTIES?
-Any constraint, tag, or property present in YAML but not on the table will be added. Any present on the table but not in YAML will be dropped on sync.
-
-4.5 WHAT HAPPENS IF I TRY TO CHANGE A COLUMN TYPE?
-This will fail validation—schema evolution does not support type changes. You must create a new table or reload data with the new schema.
-
---------------------------------------------------------------------------------
-
-5. METADATA USE CASES & ADVANCED REFERENCE
-------------------------------------------
-
-5.1 CAN I USE THIS YAML AS A CONFIG/REFERENCE FILE?
-Yes. The YAML is a single source of truth for table structure, keys, tags, constraints, etc.—you can use it for documentation, reference, or as config input for other jobs.
-
-5.2 HOW CAN I REFERENCE YAML-DEFINED KEYS, TAGS, OR FKs IN OTHER CODE?
-Parse the YAML directly with PyYAML or similar. Any field in the YAML (primary keys, tags, foreign keys) can be accessed programmatically by any Python/ETL code—not just the loader.
-
-5.3 CAN THIS TOOL HELP OTHER ETL JOBS MANAGE DEPENDENCIES?
-Yes. You can reference YAML for table structure, constraints, owner, or custom properties as part of dependency management, ETL job configuration, or pipeline automation.
-
---------------------------------------------------------------------------------
+END OF OUTLINE
