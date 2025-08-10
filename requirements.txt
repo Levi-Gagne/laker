@@ -1,3 +1,6 @@
-pyspark>=3.3.0
-pyyaml>=5.4
+# Minimal runtime requirements for local usage outside Databricks
+PyYAML>=6
 typing-extensions>=4.0
+
+# Optional: install Spark locally (avoid on Databricks clusters)
+# pyspark>=3.5,<4
