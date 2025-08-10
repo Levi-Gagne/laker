@@ -33,10 +33,17 @@ classifiers = [
   "Topic :: Software Development :: Build Tools",
   "Topic :: Utilities"
 ]
+
+# Core deps only (no pyspark here; Databricks users already have Spark)
 dependencies = [
-  "pyspark>=3.3.0",
   "pyyaml>=5.4",
   "typing-extensions>=4.0",
+]
+
+[project.optional-dependencies]
+# Install Spark only when needed (e.g., local dev outside Databricks)
+spark = [
+  "pyspark>=3.3,<4"
 ]
 
 [project.urls]
