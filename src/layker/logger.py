@@ -12,17 +12,17 @@ import yaml
 from pyspark.sql import Row, SparkSession
 from pyspark.sql import functions as F
 
-from layker.yaml import TableSchemaConfig
+from layker.snapshot_yaml import validate_and_snapshot_yaml
 from layker.snapshot_table import TableSnapshot
+from layker.differences import generate_differences
+from layker.loader import DatabricksTableLoader
 from layker.utils.table import table_exists, refresh_table
-from layker.steps.validate import validate_and_sanitize_yaml
-from layker.steps.loader import apply_loader_step
 
 
 class TableAuditLogger:
     """
     Audit logger that derives:
-      - target table FQN from the audit DDL YAML
+      - target audit log table FQN by reading the audit DDL YAML
       - column order from the YAML's `columns` section
 
     Snapshot formatting:
@@ -45,9 +45,12 @@ class TableAuditLogger:
         self.actor = actor
         self.snapshot_format = snapshot_format
 
-        # Resolve table name from YAML (handles any env rules your TableSchemaConfig applies)
-        self._table_cfg = TableSchemaConfig(audit_yaml_path, env=env)
-        self.log_table: str = self._table_cfg.full_table_name
+        # Resolve audit table FQN from YAML using the new snapshot validator
+        audit_snapshot_yaml, audit_fq = validate_and_snapshot_yaml(
+            audit_yaml_path, env=env, mode="apply"
+        )
+        self._audit_snapshot_yaml = audit_snapshot_yaml
+        self.log_table: str = audit_fq
 
         # Load column order from YAML so no hard-coding lives here
         self.columns: List[str] = self._load_columns_from_yaml(audit_yaml_path)
@@ -117,7 +120,6 @@ class TableAuditLogger:
         try:
             logs_df = self.spark.table(self.log_table).where(F.col("fqn") == fqn)
         except Exception:
-            # If table is empty/newly created, start from scratch
             logs_df = None
 
         prior_create = 0
@@ -139,7 +141,6 @@ class TableAuditLogger:
             return f"create-{create_seq}"
         else:
             update_seq = prior_update + 1
-            # include the highest create number seen so far (0 if none)
             return f"create-{prior_create}~update-{update_seq}"
 
     # ------------------------
@@ -163,7 +164,7 @@ class TableAuditLogger:
             "yaml_path": kw.get("yaml_path"),
             "fqn": fqn,
             "change_category": change_category,
-            "change_key": change_key,  # NEW human-readable sequence key
+            "change_key": change_key,  # human-readable sequence key
             "before_value": before_val,
             "after_value": after_val,
             "notes": kw.get("notes"),
@@ -225,11 +226,15 @@ def audit_log_flow(
     """
 
     def _ensure_audit_table_exists_local() -> str:
-        audit_fq = TableSchemaConfig(audit_table_yaml_path, env=env).full_table_name
+        # Resolve audit table FQN and snapshot from YAML
+        audit_snapshot_yaml, audit_fq = validate_and_snapshot_yaml(
+            audit_table_yaml_path, env=env, mode="apply"
+        )
         if not table_exists(spark, audit_fq):
             print(f"[AUDIT] Audit table {audit_fq} not found; creating now...")
-            _ddl_cfg, cfg, _ = validate_and_sanitize_yaml(audit_table_yaml_path, env=env)
-            apply_loader_step(cfg, spark, dry_run=False, action_desc="Audit table create")
+            # Use diff generator + loader to create from snapshot YAML
+            diff = generate_differences(audit_snapshot_yaml, table_snapshot=None)
+            DatabricksTableLoader(diff, spark, dry_run=False).run()
         return audit_fq
 
     # 1) Ensure the audit table exists (scoped to this flow)
