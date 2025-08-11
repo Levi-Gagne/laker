@@ -1,0 +1,30 @@
+pip install layker today — Lakehouse-Aligned YAML Kit for Engineering Rules
+
+Excited to share my first published Python package: Layker — a Spark-native, lake-layer, infrastructure-as-code toolkit. It treats table metadata (schema, tags, comments, masking rules, row filters, constraints, properties, owner) as plain-English YAML you can review in PRs and run safely in jobs.
+
+
+Why Layker (vs. classic migration tools like Liquibase/Flyway)?
+Those excel at SQL migrations, but they usually don’t model all the table metadata for Spark/Delta in a declarative, auditable way. With Layker, you don’t need to hand-code “set this tag here, row filter there” across scattered notebooks—the YAML is the source of truth, and the engine enforces it. Built-in validation means you always know the config is sane before anything runs. (AI-friendly: the specs are readable YAML.)
+
+How it works
+	•	Validate → Diff → Apply → Audit
+	•	Applies only what changed; if nothing changed it exits cleanly—no noise.
+	•	Safe schema evolution (add/rename/drop) gated by required Delta properties.
+	•	Structured audit row per change: before JSON, differences, after JSON.
+
+pip install layker
+
+from layker.main import run_table_load
+
+run_table_load(
+    yaml_path="path/to/table.yaml",
+    env="prd",
+    mode="all",          # validate | diff | apply | all
+    dry_run=False,
+    audit_log_table=True # or pass a custom audit YAML path
+)
+
+One YAML. One run. Clear diffs. Safe updates. Automatic audit.
+If you’re Delta/Spark-native—and weighing tools like Liquibase/Flyway—give Layker a look.
+
+This is v1. I’ll keep shipping fixes and improvements, with planned add-ons like Iceberg support and a UI to author YAMLs faster.
