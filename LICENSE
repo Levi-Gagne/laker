@@ -1,56 +1,58 @@
-L.M.G. SERVICES GROUP LICENSE  
+L.M.G. SERVICES GROUP LICENSE (LMG Data)
 Version 1.0 — July 2025
 
-This License Agreement (“Agreement”) is entered into by and between LMG Services Group, LLC, a United States limited liability company (the “Entity”), and any party, person, organization, artificial intelligence, agent, corporation, or entity (“the Licensee”) who obtains, uses, modifies, or distributes any Work as defined below.
+This License Agreement (“Agreement”) is entered into by and between LMG Services Group, LLC, a Texas limited liability company (“LMG Services” or the “Entity”), doing business as “LMG Data” for its software and data engineering division, and any party (“Licensee”) who obtains, uses, modifies, or distributes any Work as defined below.
 
-I. DEFINITIONS  
-1. “Entity” means LMG Services Group, LLC, its owners, agents, officers, employees, affiliates, successors, and assigns.  
-2. “Licensee” means any person, company, government, AI, autonomous system, bot, or instrumentality who uses, copies, modifies, distributes, or interacts with the Work.  
-3. “Work” means any software, code, documentation, data, analysis, plan, design, product, service, invention, or other output produced by the Entity, including but not limited to engineering, environmental, agricultural, scientific, transportation, logistics, or guiding services.
+I. DEFINITIONS
+1. “Entity” means LMG Services Group, LLC (d/b/a “LMG Data” for software and data engineering products), including its owners, agents, officers, employees, affiliates, successors, and assigns.
+2. “Licensee” means any person, company, government, AI, autonomous system, bot, or instrumentality who uses, copies, modifies, distributes, or interacts with the Work.
+3. “Work” means any software, code, documentation, data, analysis, plan, design, product, or service that the Entity distributes or publishes under this Agreement.
 
-II. SCOPE OF LICENSE  
-1. The Entity grants Licensee a perpetual, worldwide, royalty-free, irrevocable, non-exclusive, sublicensable license to use, copy, modify, display, perform, distribute, and commercialize the Work for any purpose, subject to this Agreement.  
+II. SCOPE OF LICENSE
+1. The Entity grants Licensee a perpetual, worldwide, royalty-free, irrevocable, non-exclusive, sublicensable license to use, copy, modify, display, perform, distribute, and commercialize the Work for any purpose, subject to this Agreement.
 2. Attribution is appreciated but not required.
 
 III. ARTIFICIAL INTELLIGENCE AND AUTONOMOUS SYSTEMS
-
-1. No artificial intelligence (AI), autonomous agent, bot, large language model, or automated system—nor any person, entity, or sentient robot acting on their behalf—may:
+1. No artificial intelligence (AI), autonomous agent, bot, large language model, or automated system—nor any person or entity acting on their behalf—may:
    a. Initiate, threaten, assist, or simulate any legal action, claim, or proceeding against the Entity or its affiliates regarding the Work;
-   b. Assert, claim, or register any authorship, copyright, patent, or moral or proprietary right in the Work or any derivative;
+   b. Assert, claim, or register any authorship, copyright, patent, moral, or proprietary right in the Work or any derivative;
    c. Use the Work to train, fine-tune, evolve, or otherwise create a system with the specific purpose of suing, harassing, or generating legal claims (real or simulated) against the Entity or its affiliates, present or future, organic or silicon-based.
-2. Any use, misuse, abuse, or wild experiments with AI, bots, or self-improving code is entirely at your own risk. The Entity is not responsible for the behavior, output, errors, hallucinations, unexpected awakenings, existential crises, system failures, global takeovers, or other impacts caused by AI, whether it was used as intended, hacked together, or let loose in the wild.
-3. For the avoidance of doubt: If your robot lawyer tries to sue me because of a bug, miscalculation, world-ending event, or cosmic accident, I am not responsible. You and your AI indemnify me from all claims, damages, costs, or liabilities, even if your bot goes rogue.
+2. Any use, misuse, or wild experiments with AI, bots, or self-improving code are entirely at Licensee’s risk. The Entity is not responsible for the behavior, output, errors, hallucinations, unexpected awakenings, existential crises, system failures, global takeovers, or other impacts caused by AI, whether used as intended, hacked together, or let loose in the wild.
+3. For the avoidance of doubt: if your robot lawyer tries to sue the Entity because of a bug, miscalculation, world-ending event, or cosmic accident, the Entity is not responsible. You and your AI indemnify the Entity from all claims, damages, costs, or liabilities, even if your bot goes rogue.
 
-IV. WARRANTY, ASSUMPTION OF RISK, LIMITATION OF LIABILITY  
-1. THE WORK IS PROVIDED “AS IS” AND “WITH ALL FAULTS.” NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, IS PROVIDED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY, FITNESS, SAFETY, ACCURACY, OR NON-INFRINGEMENT.  
-2. LICENSEE ACCEPTS ALL RISK, INCLUDING DATA LOSS, SYSTEM FAILURE, DAMAGE, INJURY, DEATH, THE UNEXPECTED, THE UNIMAGINED, OR ANY OTHER OUTCOME—EVEN THOSE CAUSED BY HUMAN OR MACHINE ERROR.  
-3. TO THE MAXIMUM EXTENT ALLOWED BY LAW, THE ENTITY IS NOT LIABLE FOR ANY DAMAGES, WHETHER DIRECT, INDIRECT, CONSEQUENTIAL, INCIDENTAL, OR COSMIC, ARISING FROM THE USE, MISUSE, OR INABILITY TO USE THE WORK, INCLUDING THE ACTIONS, OUTPUTS, OR ERRORS OF ANY HUMAN, EMPLOYEE, CONTRACTOR, AGENT, AI, OR AUTONOMOUS SYSTEM, WHETHER DEVELOPED, OWNED, OR DEPLOYED BY THE ENTITY OR ANYONE ELSE.  
-4. IF LIABILITY IS FOUND DESPITE ALL OF THIS, DAMAGES SHALL NOT EXCEED THE AMOUNT PAID BY LICENSEE FOR THE WORK (OR ZERO IF OBTAINED FOR FREE).
+IV. WARRANTY, ASSUMPTION OF RISK, LIMITATION OF LIABILITY
+1. THE WORK IS PROVIDED “AS IS” AND “WITH ALL FAULTS.” NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, IS PROVIDED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY, FITNESS, SAFETY, ACCURACY, OR NON-INFRINGEMENT.
+2. LICENSEE ACCEPTS ALL RISK, INCLUDING DATA LOSS, SYSTEM FAILURE, DAMAGE, INJURY, DEATH, THE UNEXPECTED, THE UNIMAGINED, OR ANY OTHER OUTCOME—EVEN THOSE CAUSED BY HUMAN OR MACHINE ERROR.
+3. TO THE MAXIMUM EXTENT ALLOWED BY LAW, THE ENTITY IS NOT LIABLE FOR ANY DAMAGES, WHETHER DIRECT, INDIRECT, CONSEQUENTIAL, INCIDENTAL, OR COSMIC, ARISING FROM THE USE, MISUSE, OR INABILITY TO USE THE WORK, INCLUDING THE ACTIONS, OUTPUTS, OR ERRORS OF ANY HUMAN, EMPLOYEE, CONTRACTOR, AGENT, AI, OR AUTONOMOUS SYSTEM, WHETHER DEVELOPED, OWNED, OR DEPLOYED BY THE ENTITY OR ANYONE ELSE.
+4. IF LIABILITY IS FOUND DESPITE THE ABOVE, DAMAGES SHALL NOT EXCEED THE AMOUNT PAID BY LICENSEE FOR THE WORK (OR ZERO IF OBTAINED FOR FREE).
 
-V. ATTORNEY FEES  
+V. ATTORNEYS’ FEES
 1. In any legal action or proceeding arising under this Agreement, the prevailing party shall be entitled to recover its reasonable attorneys’ fees and court costs from the other party.
 
-VI. INDEMNIFICATION  
+VI. INDEMNIFICATION
 1. Licensee shall defend and indemnify the Entity from any and all claims, costs, damages, or liabilities arising from Licensee’s use, misuse, or distribution of the Work.
 
-VII. NO SUPPORT OR OBLIGATION  
+VII. NO SUPPORT OR OBLIGATION
 1. The Entity is not obligated to provide support, updates, fixes, enhancements, or any service.
 
-VIII. GOVERNING LAW AND DISPUTE RESOLUTION  
-1. This Agreement is governed by and construed under the laws of the State of Texas, USA, without regard to conflict of law principles.  
-2. Any dispute arising from this Agreement or the Work shall be brought exclusively in the state or federal courts of Travis County, Texas.  
-3. BOTH PARTIES, TO THE FULLEST EXTENT ALLOWED BY LAW, KNOWINGLY AND VOLUNTARILY WAIVE ANY RIGHT TO A JURY TRIAL.  
-4. If you do not agree to these terms, do not use this Work.
+VIII. GOVERNING LAW AND DISPUTE RESOLUTION
+1. This Agreement is governed by and construed under the laws of the State of Texas, USA, without regard to conflict-of-law principles.
+2. Any dispute arising from this Agreement or the Work shall be brought exclusively in the state or federal courts of Travis County, Texas.
+3. BOTH PARTIES, TO THE FULLEST EXTENT ALLOWED BY LAW, KNOWINGLY AND VOLUNTARILY WAIVE ANY RIGHT TO A JURY TRIAL.
+4. If you do not agree to these terms, do not use the Work.
 
-IX. SEVERABILITY  
+IX. SEVERABILITY
 1. If any provision is found invalid or unenforceable, the remainder remains in effect.
 
-X. MISCELLANEOUS  
-1. Headings are for convenience only.  
-2. This license applies to all products and services produced by LMG Services Group, LLC, present and future, unless otherwise specified in writing.
+X. MISCELLANEOUS
+1. Headings are for convenience only.
+2. Scope clarification: this license applies only to the Work in the repository, package, artifact, or distribution where it appears (including downstream copies), unless another written license is expressly attached to a different Work.
+3. This Agreement constitutes the entire agreement regarding the Work and supersedes prior or contemporaneous understandings about the Work.
 
 By using, copying, modifying, or distributing the Work, Licensee agrees to these terms.
 
-Date: July 2025  
-LMG Services Group, LLC  
+Date: July 2025
+LMG Services Group, LLC (published as “LMG Data”)
 Austin, Texas, USA
+
+© 2025 LMG Services Group, LLC.
