@@ -41,25 +41,25 @@ tags:
 
 owner: levi.gagne@claconnect.com   # Required. Data owner or product owner.
 
-properties:
-  comment: |
-    **Table:** dq_dev.lmg_sandbox.config_driven_table_example
 
-    **Governance**
-    - YAML is the source of truth; changes in UI are not tracked.
-    - Required: catalog, schema, table, at least one column with name/datatype.
-    - Use partitioned_by for scalability if needed.
+table_comment: |
+  **Table:** dq_dev.lmg_sandbox.config_driven_table_example
 
-    **Evolution**
-    - Adding columns to the end is supported.
-    - Renaming columns (by position/type) is supported.
-    - Data type changes or column drops require matching positions.
-    - Foreign keys here are not enforced—reference only.
+  **Governance**
+  - YAML is the source of truth; changes in UI are not tracked.
+  - Required: catalog, schema, table, at least one column with name/datatype.
+  - Use partitioned_by for scalability if needed.
 
-  table_properties:
-    delta.columnMapping.mode: "name"
-    delta.minReaderVersion: "2"
-    delta.minWriterVersion: "5"
+  **Evolution**
+  - Adding columns to the end is supported.
+  - Renaming columns (by position/type) is supported.
+  - Data type changes or column drops require matching positions.
+  - Foreign keys here are not enforced—reference only.
+
+table_properties:
+  delta.columnMapping.mode: "name"
+  delta.minReaderVersion: "2"
+  delta.minWriterVersion: "5"
 
 # ---- COLUMNS SECTION ----
 columns:
