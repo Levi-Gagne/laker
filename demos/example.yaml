@@ -2,7 +2,7 @@
 # YAML TABLE DDL TEMPLATE — ALL OPTIONS & EXAMPLES
 # ===========================
 
-catalog: dq_dev      # Required. If ends with '_', will append env (e.g., dq_dev_{env}). If not, used as is.
+catalog: de_dev      # Required. If ends with '_', will append env (e.g., dq_dev_{env}). If not, used as is.
 schema: lmg_sandbox  # Required. Schema name in catalog.
 table: config_driven_table_example   # Required. Table name.
 
@@ -36,10 +36,10 @@ row_filters:
 tags:
   team: dq
   project: poc
-  data_owner: levi.gagne@claconnect.com
+  data_owner: levi.gagne@gmail.com
   classification: internal
 
-owner: levi.gagne@claconnect.com   # Required. Data owner or product owner.
+owner: levi.gagne@gmail.com   # Required. Data owner or product owner.
 
 properties:
   comment: |
