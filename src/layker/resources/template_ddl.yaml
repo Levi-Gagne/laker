@@ -1,0 +1,78 @@
+# ===========================
+# LAYKER TABLE DDL — TEMPLATE (placeholders)
+# ===========================
+
+catalog: "<CATALOG>"              # e.g., de_dev
+schema: "<SCHEMA>"                # e.g., lmg_sandbox
+table: "<TABLE_NAME>"
+
+primary_key: ["<PK_COL>", "<OPTIONAL_PK2>"]
+partitioned_by: ["<PARTITION_COL>"]
+unique_keys: []                   # e.g., [["email"], ["user_id","group_id"]]
+
+# Informational (not enforced by UC)
+foreign_keys:
+  fk_<NAME>:
+    columns: ["<COL>"]
+    reference_table: "<CATALOG>.<SCHEMA>.<TABLE>"
+    reference_columns: ["<REF_COL>"]
+
+table_check_constraints:
+  check_<NAME>:
+    name: "<NAME>"
+    expression: "<spark_sql_predicate>"
+
+row_filters:
+  rls_<NAME>:
+    name: "<NAME>"
+    expression: "<spark_sql_predicate>"
+
+tags:
+  team: "<TEAM>"
+  classification: "<internal|restricted>"
+  data_owner: "<owner@company.com>"
+
+owner: "<owner@company.com>"
+
+table_comment: |
+  **Table:** <CATALOG>.<SCHEMA>.<TABLE>
+  - Source of truth: YAML in repo/volume.
+  - Edits in UI are not tracked.
+
+table_properties:
+  delta.columnMapping.mode: "name"
+  delta.minReaderVersion: "2"
+  delta.minWriterVersion: "5"
+
+columns:
+  1:
+    name: "<col_1>"
+    datatype: "<type>"
+    nullable: true
+    comment: "<column comment>"
+    tags:
+      pii: "<true|false>"
+      business_key: "<yes|no>"
+      <CUSTOM_TAG>: "<VALUE>"
+    column_masking_rule: "<MASK RULE | ''>"
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    column_check_constraints:
+      check_<NAME>:
+        name: "<NAME>"
+        expression: "<spark_sql_predicate>"
+    active: true
+
+  2:
+    name: "<col_2>"
+    datatype: "<type>"
+    nullable: true
+    comment: ""
+    tags: {}
+    column_masking_rule: ""
+    default_value: null
+    variable_value: null
+    allowed_values: []
+    column_check_constraints: {}
+    active: true
