@@ -1,4 +1,74 @@
-# -*- coding: utf-8 -*-
+# src/layker/utils/yaml_table_dump.py
+
+"""
+START: create_yaml_exports
+
+|
+|-- 0) Normalize + banner
+|     |-- Ensure Spark session (get_or_create_spark).
+|     |-- Print START banner (Print.banner_timer decorator).
+|
+|-- 1) Resolve scope (exactly one of: table | tables | schema | catalog | pipeline)
+|     |-- If input invalid → raise ValueError with {ERROR}.
+|     |-- If table:
+|     |     |-- Require FQN 'catalog.schema.table' (else ValueError).
+|     |     |-- targets = [table]
+|     |
+|     |-- If tables:
+|     |     |-- Keep only FQNs; non-FQNs are skipped with {WARN}.
+|     |     |-- targets = unique FQNs
+|     |
+|     |-- If schema ('cat.schema'):
+|     |     |-- Parse + validate.
+|     |     |-- List tables:
+|     |           * Prefer SDK: TableDiscovery.discover_schema_tables(list_columns=False)
+|     |           * Fallback: Spark information_schema.tables
+|     |     |-- targets = FQNs (views included only if include_views==True)
+|     |
+|     |-- If catalog:
+|     |     |-- List schemas, then tables (SDK first; Spark fallback).
+|     |     |-- targets = FQNs
+|     |
+|     |-- If pipeline:
+|     |     |-- SDK required:
+|     |           * TableDiscovery.discover_pipeline_tables(list_columns=False, assume_schema=...)
+|     |     |-- If any names are not FQN and assume_schema not set → {WARN} and skip those.
+|     |     |-- targets = FQNs only
+|
+|-- 2) Short-circuit if no targets
+|     |-- Print {WARN} "No tables found for the requested scope. Nothing to do."
+|     |-- EXIT cleanly (return [])
+|
+|-- 3) Snapshot loop (for each FQN in targets)
+|     |-- Call TableSnapshot(spark, fqn).build_table_metadata_dict()
+|     |     |-- Internally:
+|     |           * table_exists() check
+|     |           * DESCRIBE EXTENDED + information_schema reads
+|     |           * Build canonical dict: columns, tags, checks, properties, owner, partitioning, PK/UK…
+|     |-- If snapshot is None (table missing / not visible):
+|     |     |-- Print {WARN} "SKIP: <fqn> not found / not visible."
+|     |     |-- continue
+|
+|-- 4) YAML render
+|     |-- Convert snapshot dict → CLA YAML (ruamel.yaml)
+|     |-- Columns section preserves 1..N ordering and fields
+|
+|-- 5) Write file
+|     |-- Ensure output_dir (local, /Volumes, or dbfs:/)
+|     |-- Filename policy:
+|     |     |-- "table"        → <table>.yaml
+|     |     |-- "schema_table" → <schema>__<table>.yaml
+|     |     |-- "fqn"          → <catalog>__<schema>__<table>.yaml
+|     |-- Respect overwrite flag (refuse if False and exists).
+|     |-- Print {SUCCESS} "Wrote <path>"
+|
+|-- 6) Summary
+|     |-- Print {INFO} "Done. Created <N> YAML file(s) → <output_dir>"
+|
+|-- END: create_yaml_exports
+|     |-- Banner shows total elapsed time.
+"""
+
 from __future__ import annotations
 
 import os, io
