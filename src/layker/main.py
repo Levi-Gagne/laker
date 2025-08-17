@@ -59,7 +59,6 @@ START: run_table_load  (decorated with @laker_banner → prints START/END banner
 |                             * Print explicit error, EXIT 2 (do NOT apply changes, do NOT audit).
 |                       - Else:
 |                             * Print success (“properties present; proceeding”).
-|           |-- 4.2) (Reserved) Other validations — currently a no-op.
 |
 |-- 5) DIFF-ONLY MODE QUICK EXIT
 |     |-- If mode == "diff":
@@ -137,21 +136,14 @@ from layker.validators.differences import validate_differences
 
 # --- Utils ---
 from layker.utils.spark import get_or_create_spark
-from layker.utils.color import Color
-from layker.utils.printer import (
-    laker_banner,          # H1 decorator (start/end + timing)
-    section_header,        # H2
-    subsection_header,     # H3
-    print_success,
-    print_warning,
-    print_error,
-)
+from layker.utils.color import Color  # keep for your custom colorization lines
+from layker.utils.printer import Print  # new generic printer
 
 def _has_changes(diff: Dict[str, Any]) -> bool:
     # diff is considered meaningful only if add/update/remove present
     return any(k in diff and diff[k] for k in ("add", "update", "remove"))
 
-@laker_banner("Run Table Load")
+@Print.banner_timer("Run Table Load", kind="app")   # replaces @laker_banner, same behavior
 def run_table_load(
     yaml_path: str,
     dry_run: bool = False,
@@ -169,42 +161,43 @@ def run_table_load(
         )
 
         # ----- STEP 1/5 -----
-        print(section_header("STEP 1/5: VALIDATING YAML"))
+        Print.print_banner("h2", "STEP 1/5: VALIDATING YAML")
         snapshot_yaml, fq = validate_and_snapshot_yaml(yaml_path, env=env, mode=mode)
         if mode == "validate":
-            print_success("YAML validation passed.")
+            print(f"{Print.SUCCESS}YAML validation passed.")
             sys.exit(0)
 
         # ----- STEP 2/5 -----
-        print(section_header("STEP 2/5: TABLE SNAPSHOT"))
+        Print.print_banner("h2", "STEP 2/5: TABLE SNAPSHOT")
         table_snapshot = TableSnapshot(spark, fq).build_table_metadata_dict()
 
         # ----- STEP 3/5 -----
-        print(section_header("STEP 3/5: COMPUTE DIFFERENCES"))
+        Print.print_banner("h2", "STEP 3/5: COMPUTE DIFFERENCES")
         snapshot_diff = generate_differences(snapshot_yaml, table_snapshot)
         if not _has_changes(snapshot_diff):
-            print_success("No metadata changes detected; exiting cleanly. Everything is up to date.")
+            print(f"{Print.SUCCESS}No metadata changes detected; exiting cleanly. Everything is up to date.")
             sys.exit(0)
 
         validate_differences(snapshot_diff, table_snapshot)
 
         if mode == "diff":
-            print_warning(f"[DIFF] Proposed changes:")
+            print(f"{Print.WARN}[DIFF] Proposed changes:")
             for k, v in snapshot_diff.items():
                 if v:
+                    # keep your existing custom Color styling here
                     print(f"{Color.b}{Color.aqua_blue}{k}:{Color.ivory} {v}{Color.r}")
             sys.exit(0)
 
         # ----- STEP 4/5 -----
-        print(section_header("STEP 4/5: LOAD TABLE"))
+        Print.print_banner("h2", "STEP 4/5: LOAD TABLE")
         if mode in ("apply", "all") and not dry_run:
             # Sub-header for the actual apply work
-            print(subsection_header("APPLYING METADATA CHANGES"))
+            Print.print_banner("h3", "APPLYING METADATA CHANGES")
             DatabricksTableLoader(snapshot_diff, spark, dry_run=dry_run).run()
 
             # ----- STEP 5/5 -----
             if audit_log_table is not False:
-                print(section_header("STEP 5/5: LOG TABLE UPDATE"))
+                Print.print_banner("h2", "STEP 5/5: LOG TABLE UPDATE")
                 if audit_log_table is True:
                     audit_log_table = "layker/resources/layker_audit.yaml"
 
@@ -221,26 +214,27 @@ def run_table_load(
                     snapshot_format="json_pretty",
                 )
             else:
-                print_success("Table loaded. Audit logging not enabled; exiting script.")
+                print(f"{Print.SUCCESS}Table loaded. Audit logging not enabled; exiting script.")
             return
 
-        print_success("Completed without applying changes.")
+        print(f"{Print.SUCCESS}Completed without applying changes.")
 
     except SystemExit:
         raise
     except KeyboardInterrupt:
-        print_error("Interrupted by user. Exiting...")
+        print(f"{Print.ERROR}Interrupted by user. Exiting...")
         sys.exit(130)
     except Exception as e:
-        print_error(f"Fatal error during run_table_load:\n{e}")
+        print(f"{Print.ERROR}Fatal error during run_table_load:\n{e}")
         import traceback
-        print(f"{Color.red}{traceback.format_exc()}{Color.r}")
+        # keep the stacktrace readable but consistently tagged
+        print(f"{Print.ERROR}{traceback.format_exc()}")
         sys.exit(1)
 
 
 def cli_entry():
     if len(sys.argv) < 2:
-        print_error("Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit_log_table]")
+        print(f"{Print.ERROR}Usage: python -m layker <yaml_path> [env] [dry_run] [mode] [audit_log_table]")
         sys.exit(1)
     yaml_path = sys.argv[1]
     env      = sys.argv[2] if len(sys.argv) > 2 else None
