@@ -1,0 +1,87 @@
+layker/
+├── .github/
+│   └── workflows/
+│       └── workflow.yaml
+│
+├── demos/
+│   ├── example.yaml
+│   └── layker_test.yaml
+│
+├── docs/
+│   ├── images/
+│   │   ├── 0B4CBA42-AAC5-4F59-AE9B-5A217323A3B4.png
+│   │   ├── 14BB13C7-ACBB-405B-89C9-6F17B2C43F61.png
+│   │   ├── 1B8698C3-0D26-4584-8623-724FB95C6F87.png
+│   │   ├── 2091DBD8-12E4-48D2-8310-0226F6EADFF9.png
+│   │   ├── 2563631A-2668-44DD-894A-94E684153FF9.png
+│   │   ├── 29C188EA-C11B-4CA5-8A94-BF63AC40C937.png
+│   │   ├── 2F318FC6-D04C-42D7-AFD4-4AFB89A990E3.png
+│   │   ├── 76D7E9D6-4621-438D-8E4A-E41E6E74A6C9.png
+│   │   ├── 800F2265-37DF-43B2-8040-D8BF481A9557.png
+│   │   ├── 93287FEB-369A-4F4C-80A0-2D702D7F039D.png
+│   │   ├── A5D0ED99-D57B-4A8C-9B27-104CB6EB9B63.png
+│   │   ├── AF1FED3A-001F-4A38-936E-FD099086F2B6.png
+│   │   ├── E4356857-84E0-482F-8C1F-C3D515B8523D.png
+│   │   ├── icon_primary.svg
+│   │   ├── layker_lockup_horizontal_light_eye-left.svg
+│   │   ├── layker_logo_chevron.png
+│   │   ├── layker_logo_chevron_1_monotone.PNG
+│   │   ├── layker_profile_header.png
+│   │   ├── layker_wordmark_light_tagline.svg
+│   │   ├── logo_variant_a_fish_chevrons.svg
+│   │   ├── wordmark_lockup.svg
+│   │   └── wordmark_text.svg
+│   │
+│   ├── audit.md
+│   ├── FAQ
+│   ├── FLOW
+│   ├── FUTURE_ENHANCEMENTS
+│   ├── snapshot.txt
+│   └── tree.txt
+│
+├── src/
+│   ├── layker/
+│   │   ├── resources/
+│   │   │   ├── config_driven_table_example.yaml
+│   │   │   └── layker_audit.yaml
+│   │   │
+│   │   ├── utils/
+│   │   │   ├── __init__.py
+│   │   │   ├── color.py
+│   │   │   ├── dry_run.py
+│   │   │   ├── paths.py
+│   │   │   ├── printer.py
+│   │   │   ├── spark.py
+│   │   │   ├── table.py
+│   │   │   ├── timer.py
+│   │   │   └── yaml_table_dump.py
+│   │   │
+│   │   ├── validators/
+│   │   │   ├── __init__.py
+│   │   │   ├── differences.py
+│   │   │   └── params.py
+│   │   │
+│   │   ├── __about__.py
+│   │   ├── __init__.py
+│   │   ├── __main__.py
+│   │   ├── differences.py
+│   │   ├── loader.py
+│   │   ├── logger.py
+│   │   ├── main.py
+│   │   ├── snapshot_table.py
+│   │   └── snapshot_yaml.py
+│   │
+│   ├── dev_testing
+│   └── test_layker
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_loader.py
+│   └── test_main.py
+│
+├── .gitignore
+├── LICENSE
+├── MANIFEST.in
+├── pyproject.toml
+├── README.md
+└── requirements.txt
