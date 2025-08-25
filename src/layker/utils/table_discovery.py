@@ -2,7 +2,6 @@
 
 """
 START: table_discovery
-
 |
 |-- 0) Entry
 |     |-- Called via one-liner: TableDiscovery.tree(source, …)
@@ -113,8 +112,8 @@ import sys
 from databricks.sdk import WorkspaceClient
 from pyspark.sql import SparkSession
 
-from layker.utils.printer import Print
-from layker.utils.table import (
+from utils.printer import Print
+from utils.table import (
     is_view,
     is_fully_qualified_table_name,
     parse_catalog_schema_fqn,
